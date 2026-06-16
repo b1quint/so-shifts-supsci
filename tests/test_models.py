@@ -44,7 +44,9 @@ def test_availability_grid_defaults_missing_to_dash():
 
 def test_block_reports_start_end_and_weekend_days():
     # 2026-06-12 is a Friday; 13 Sat, 14 Sun, 15 Mon.
-    block = Block(dates=(date(2026, 6, 12), date(2026, 6, 13), date(2026, 6, 14), date(2026, 6, 15)))
+    block = Block(
+        dates=(date(2026, 6, 12), date(2026, 6, 13), date(2026, 6, 14), date(2026, 6, 15))
+    )
     assert block.start == date(2026, 6, 12)
     assert block.end == date(2026, 6, 15)
     assert block.weekend_days() == (date(2026, 6, 13), date(2026, 6, 14))
