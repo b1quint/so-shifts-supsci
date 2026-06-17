@@ -1,25 +1,70 @@
-"""Persist a :class:`Proposal` — for review, never into live rows.
+"""Persist a :class:`Proposal` — for review, never into the live rows.
 
-v1 target is a **CSV** (``Settings.output_target`` will later select the
-gspread "proposed column" path; deferred until the first live run). A CSV is the
-safest possible writeback: it cannot touch the spreadsheet's live assignment
-rows, and it is fully testable without auth.
+Two targets, both safe (neither touches the live ``SupSci`` assignment rows):
 
-Row shaping is reused from :mod:`output.proposal` so the CSV columns line up with
-the review report. Each row carries the per-term score breakdown, so the *why*
-behind every pick is exported alongside the pick.
+* a **CSV** — the full review table (status, span, person, score + term columns).
+* the **in-sheet calendar** — the proposed picks placed into a SupSci-shaped
+  *duplicate* tab the same way a human fills the original: a token in each
+  assigned person's shift row, under each date, filling only empty cells.
+
+CSV row shaping is reused from :mod:`output.proposal`. The calendar planner
+(:func:`plan_calendar_fill`) is pure — it decides *which* cells to fill given
+resolved row/date positions, leaving the gspread apply to :mod:`io.sheets`.
 """
 
 from __future__ import annotations
 
 import csv
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from shift_proposer.models import Proposal
 from shift_proposer.output.proposal import term_columns, to_rows
 
 _BASE_HEADER = ("status", "start", "end", "person", "score")
+
+
+@dataclass(frozen=True)
+class CellUpdate:
+    """One cell to write: 0-indexed ``row``/``col`` and the string ``value``."""
+
+    row: int
+    col: int
+    value: str
+
+
+def plan_calendar_fill(
+    proposal: Proposal,
+    *,
+    shift_row_by_name: Mapping[str, int],
+    col_by_date: Mapping[date, int],
+    is_empty: Callable[[int, int], bool],
+    token: str = "S",
+) -> list[CellUpdate]:
+    """Plan the cells to fill for ``proposal`` in a SupSci-shaped tab.
+
+    For each proposed assignment, writes ``token`` into that person's shift row
+    (``shift_row_by_name``) under each date of the block (``col_by_date``) — but
+    only where ``is_empty(row, col)`` holds, so existing assignments are never
+    overwritten ("populate the missing values"). Unfilled blocks write nothing.
+
+    A person or date with no mapped position is skipped (the caller can detect
+    this by comparing the update count to the proposed shift-days).
+    """
+    updates: list[CellUpdate] = []
+    for assignment in proposal.assignments:
+        row = shift_row_by_name.get(assignment.person.name)
+        if row is None:
+            continue
+        for day in assignment.block.dates:
+            col = col_by_date.get(day)
+            if col is None:
+                continue
+            if is_empty(row, col):
+                updates.append(CellUpdate(row=row, col=col, value=token))
+    return updates
 
 
 def _num(value: float | None) -> str:

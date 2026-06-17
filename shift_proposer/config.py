@@ -58,6 +58,12 @@ class Settings:
     tab_name: str = "SupSci"
     # FTE (target-dedication) tab; None disables FTE weighting (equal split).
     fte_tab_name: str | None = None
+    # Output tab to write the proposed calendar into (a SupSci-shaped duplicate,
+    # never the live SupSci tab); None disables the in-sheet writeback.
+    proposal_tab_name: str | None = None
+    # Token written into a person's shift row for each proposed date (matches how
+    # the live sheet marks a summit-support shift).
+    proposal_token: str = "S"
 
     @classmethod
     def from_env(cls, **overrides) -> Settings:

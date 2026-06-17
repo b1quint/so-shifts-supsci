@@ -24,8 +24,9 @@ from gspread.utils import ValueRenderOption
 
 from shift_proposer.config import Settings
 from shift_proposer.io.fte import parse_fte_grid
-from shift_proposer.io.parser import ParsedSheet, parse_grid
-from shift_proposer.models import Person
+from shift_proposer.io.parser import ParsedSheet, index_grid, parse_grid
+from shift_proposer.models import Person, Proposal
+from shift_proposer.output.writeback import CellUpdate, plan_calendar_fill
 
 
 class _Worksheet(Protocol):
@@ -97,3 +98,61 @@ def read_fte_grid(settings: Settings, *, client: gspread.Client | None = None) -
 def load_fte(settings: Settings, *, client: gspread.Client | None = None) -> dict[Person, float]:
     """Read the FTE tab and parse it into ``{Person: weight}``."""
     return parse_fte_grid(read_fte_grid(settings, client=client))
+
+
+def plan_proposal_calendar(
+    rows: list[list[str]], proposal: Proposal, settings: Settings
+) -> list[CellUpdate]:
+    """Plan the cells to fill in a SupSci-shaped grid for ``proposal`` (pure).
+
+    Indexes ``rows`` (the duplicate tab read as a raw grid) and fills only empty
+    shift cells. Separated from the network apply so it is unit-testable.
+    """
+    idx = index_grid(rows)
+
+    def is_empty(r: int, c: int) -> bool:
+        if r >= len(rows) or c >= len(rows[r]):
+            return True
+        return rows[r][c].strip() == ""
+
+    return plan_calendar_fill(
+        proposal,
+        shift_row_by_name=idx.shift_row_by_name,
+        col_by_date=idx.col_by_date,
+        is_empty=is_empty,
+        token=settings.proposal_token,
+    )
+
+
+def write_proposal_calendar(
+    settings: Settings,
+    proposal: Proposal,
+    *,
+    client: gspread.Client | None = None,
+    dry_run: bool = False,
+) -> list[CellUpdate]:
+    """Write ``proposal`` into the proposal tab's calendar; return the updates.
+
+    Reads the proposal tab as a raw grid, plans which empty shift cells to fill
+    (:func:`plan_proposal_calendar`), and applies them in one batch. Refuses to
+    write to the live ``SupSci`` tab — the target must be a separate duplicate.
+    With ``dry_run`` the planned updates are returned but nothing is written.
+    """
+    if not settings.sheet_id:
+        raise ValueError("settings.sheet_id is required (set SHIFT_SHEET_ID).")
+    if not settings.proposal_tab_name:
+        raise ValueError("settings.proposal_tab_name is required to write the calendar.")
+    if settings.proposal_tab_name == settings.tab_name:
+        raise ValueError(
+            f"refusing to write into the live tab {settings.tab_name!r}; "
+            "proposal_tab_name must be a separate duplicate."
+        )
+
+    client = client or authorize(settings)
+    worksheet = open_worksheet(client, settings, settings.proposal_tab_name)
+    rows = fetch_grid(worksheet)
+    updates = plan_proposal_calendar(rows, proposal, settings)
+    if updates and not dry_run:
+        cells = [gspread.Cell(row=u.row + 1, col=u.col + 1, value=u.value) for u in updates]
+        worksheet.update_cells(cells)
+    return updates

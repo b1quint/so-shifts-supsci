@@ -12,6 +12,7 @@ import pytest
 
 from shift_proposer.io.parser import (
     LayoutConfig,
+    index_grid,
     parse_date_row,
     parse_grid,
 )
@@ -95,6 +96,17 @@ def test_explicit_dates_override_the_date_row():
     parsed = parse_grid(GRID, dates=explicit)
     assert parsed.grid.dates == tuple(explicit)
     assert parsed.grid.code(ANN, explicit[2]) is Code.X
+
+
+# --- layout index (for writeback) ------------------------------------------
+
+
+def test_index_grid_maps_shift_rows_and_date_columns():
+    idx = index_grid(GRID)
+    # Ann's avail row is index 5 -> shift row 6; Bo's avail 7 -> shift 8.
+    assert idx.shift_row_by_name == {"Ann": 6, "Bo": 8}
+    # Dates start at column D (index 3), one per column.
+    assert idx.col_by_date == {D1: 3, D2: 4, D3: 5}
 
 
 def test_roster_stops_at_first_blank_name():

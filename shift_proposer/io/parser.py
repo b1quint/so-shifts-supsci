@@ -172,6 +172,51 @@ def _person_status(rows: Sequence[Sequence[str]], r: int, layout: LayoutConfig) 
     return "skip"
 
 
+@dataclass(frozen=True)
+class LayoutIndex:
+    """Where each person and date sits in a SupSci-shaped grid (0-indexed).
+
+    Built by :func:`index_grid` for the writeback path: it locates a person's
+    **shift row** (the row written when they are on shift) and the column for
+    each calendar date, so a proposal can be placed back into a duplicate tab.
+    Both active (``Avail``) and ``Out`` person rows are indexed by name.
+    """
+
+    shift_row_by_name: dict[str, int] = field(default_factory=dict)
+    col_by_date: dict[date, int] = field(default_factory=dict)
+
+
+def index_grid(
+    rows: Sequence[Sequence[str]],
+    *,
+    dates: Sequence[date] | None = None,
+    layout: LayoutConfig | None = None,
+) -> LayoutIndex:
+    """Map names → shift-row index and dates → column index for ``rows``.
+
+    Uses the same layout and row-classification as :func:`parse_grid`, so the
+    positions line up with how the sheet is read. ``dates`` may be supplied
+    pre-resolved; otherwise they are read from the date row.
+    """
+    layout = layout or _DEFAULT_LAYOUT
+    if dates is None:
+        date_cells = (
+            rows[layout.date_row][layout.first_date_col :] if layout.date_row < len(rows) else []
+        )
+        dates = parse_date_row(list(date_cells))
+
+    col_by_date = {day: layout.first_date_col + offset for offset, day in enumerate(dates)}
+
+    shift_row_by_name: dict[str, int] = {}
+    for r in range(layout.first_person_row, len(rows), layout.rows_per_person):
+        if _person_status(rows, r, layout) == "skip":
+            continue
+        name = _cell(rows, r, layout.name_col)
+        shift_row_by_name[name] = r + 1  # the shift row sits below the avail row
+
+    return LayoutIndex(shift_row_by_name=shift_row_by_name, col_by_date=col_by_date)
+
+
 def parse_grid(
     rows: Sequence[Sequence[str]],
     *,

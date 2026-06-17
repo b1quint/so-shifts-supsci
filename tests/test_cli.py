@@ -206,3 +206,12 @@ def test_parse_args_reads_window_and_sheet_id():
 def test_parse_args_reads_fte_tab():
     assert parse_args([]).fte_tab is None
     assert parse_args(["--fte-tab", "FTE"]).fte_tab == "FTE"
+
+
+def test_parse_args_reads_out_tab_and_dry_run():
+    defaults = parse_args([])
+    assert defaults.out_tab is None
+    assert defaults.dry_run is False
+    args = parse_args(["--out-tab", "SupSci Shift Proposal", "--dry-run"])
+    assert args.out_tab == "SupSci Shift Proposal"
+    assert args.dry_run is True

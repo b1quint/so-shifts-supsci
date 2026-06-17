@@ -7,6 +7,8 @@ spreadsheet id / tab name are threaded through, and that a missing id is a clear
 error. Live auth (``authorize``) is intentionally untested.
 """
 
+from datetime import date, timedelta
+
 import pytest
 from gspread.utils import ValueRenderOption
 
@@ -15,10 +17,12 @@ from shift_proposer.io.sheets import (
     fetch_grid,
     load_fte,
     open_worksheet,
+    plan_proposal_calendar,
     read_fte_grid,
     read_raw_grid,
+    write_proposal_calendar,
 )
-from shift_proposer.models import Person
+from shift_proposer.models import Assignment, Block, Person, Proposal, Rationale
 
 
 class FakeWorksheet:
@@ -146,3 +150,82 @@ def test_load_fte_parses_to_person_weights():
     weights = load_fte(settings, client=client)
 
     assert weights == {Person("Ann"): 1.0, Person("Bo"): 0.5}
+
+
+# --- writing the proposal calendar -----------------------------------------
+
+
+class WritableFakeWorksheet(FakeWorksheet):
+    def __init__(self, values):
+        super().__init__(values)
+        self.written = None
+
+    def update_cells(self, cells):
+        self.written = [(c.row, c.col, c.value) for c in cells]
+
+
+# A SupSci-shaped proposal tab: dates at cols 3-6, Ann (rows 5/6), Bo (rows 7/8).
+# Ann's shift row already has an assignment on day 1 (col 3).
+PROP_TAB = [
+    ["", "", "", "", "", "", ""],
+    ["", "", "", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04"],
+    ["", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", ""],
+    ["Ann", "AN", "Avail", "", "", "", ""],
+    ["", "", "Shift", "S", "", "", ""],  # day 1 already filled
+    ["Bo", "BO", "Avail", "", "", "", ""],
+    ["", "", "Shift", "", "", "", ""],
+]
+
+
+def _block(start_offsets):
+    base = date(2026, 6, 1)
+    return Block(dates=tuple(base + timedelta(days=i) for i in start_offsets))
+
+
+def _proposal_for(person):
+    rationale = Rationale(total=1.0, terms={})
+    return Proposal(assignments=(Assignment(person, _block(range(4)), rationale),))
+
+
+def test_plan_proposal_calendar_fills_only_empty_shift_cells():
+    settings = Settings(sheet_id="S", proposal_tab_name="Prop")
+    updates = plan_proposal_calendar(PROP_TAB, _proposal_for(Person("Ann")), settings)
+    # Ann's shift row is index 6; day-1 col 3 is already filled -> skipped.
+    assert [(u.row, u.col, u.value) for u in updates] == [
+        (6, 4, "S"),
+        (6, 5, "S"),
+        (6, 6, "S"),
+    ]
+
+
+def test_write_proposal_calendar_applies_cells_through_gspread():
+    ws = WritableFakeWorksheet(PROP_TAB)
+    client = FakeClient(FakeMultiTabSpreadsheet({"Prop": ws}))
+    settings = Settings(sheet_id="S", tab_name="SupSci", proposal_tab_name="Prop")
+
+    updates = write_proposal_calendar(settings, _proposal_for(Person("Bo")), client=client)
+
+    # Bo's shift row is index 8; all four days empty -> four writes (1-indexed).
+    assert ws.written == [(9, 4, "S"), (9, 5, "S"), (9, 6, "S"), (9, 7, "S")]
+    assert len(updates) == 4
+
+
+def test_write_proposal_calendar_dry_run_writes_nothing():
+    ws = WritableFakeWorksheet(PROP_TAB)
+    client = FakeClient(FakeMultiTabSpreadsheet({"Prop": ws}))
+    settings = Settings(sheet_id="S", proposal_tab_name="Prop")
+
+    updates = write_proposal_calendar(
+        settings, _proposal_for(Person("Bo")), client=client, dry_run=True
+    )
+
+    assert ws.written is None  # nothing applied
+    assert len(updates) == 4  # but the plan is still returned
+
+
+def test_write_proposal_calendar_refuses_to_write_the_live_tab():
+    settings = Settings(sheet_id="S", tab_name="SupSci", proposal_tab_name="SupSci")
+    with pytest.raises(ValueError, match="refusing to write into the live tab"):
+        write_proposal_calendar(settings, _proposal_for(Person("Bo")), client=FakeClient(None))

@@ -20,7 +20,7 @@ from pathlib import Path
 
 from shift_proposer.config import Settings
 from shift_proposer.engine.greedy import propose
-from shift_proposer.io.sheets import load_fte, load_sheet
+from shift_proposer.io.sheets import load_fte, load_sheet, write_proposal_calendar
 from shift_proposer.models import AvailabilityGrid, Person, Proposal
 from shift_proposer.output.proposal import render_report
 from shift_proposer.output.writeback import write_csv
@@ -119,6 +119,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="tab holding per-person target FTE %% (enables FTE-weighted fair share)",
     )
     parser.add_argument(
+        "--out-tab",
+        help="SupSci-shaped duplicate tab to write the proposed calendar into "
+        "(fills empty shift cells; never the live SupSci tab)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="with --out-tab, show how many cells would be written without writing",
+    )
+    parser.add_argument(
         "--window-start",
         type=date.fromisoformat,
         help="earliest date to propose (YYYY-MM-DD)",
@@ -139,6 +149,8 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         overrides["tab_name"] = args.tab
     if args.fte_tab:
         overrides["fte_tab_name"] = args.fte_tab
+    if args.out_tab:
+        overrides["proposal_tab_name"] = args.out_tab
     if args.window_start:
         overrides["window_start"] = args.window_start
     if args.window_end:
@@ -162,6 +174,19 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(proposal.unfilled)} unfilled, to {out}",
         file=sys.stderr,
     )
+
+    if settings.proposal_tab_name:
+        try:
+            updates = write_proposal_calendar(settings, proposal, dry_run=args.dry_run)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        verb = "Would write" if args.dry_run else "Wrote"
+        print(
+            f"{verb} {len(updates)} cell(s) into tab {settings.proposal_tab_name!r}.",
+            file=sys.stderr,
+        )
+
     return 0
 
 
