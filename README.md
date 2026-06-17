@@ -192,6 +192,12 @@ the right way to handle a non-rotation person — do **not** fill their row with
 If your sheet differs, the positions live in one place — `LayoutConfig` in
 [shift_proposer/io/parser.py](shift_proposer/io/parser.py) — and can be adjusted.
 
+**No-shift periods.** A checkbox row labelled **`Requires support?`** (one box per
+date) marks nights when no shift should run at all (shutdowns, engineering). Untick
+it (**`FALSE`**) and the tool skips that date entirely — it is never proposed and
+never flagged as "unfilled". Ticked or missing means a shift is wanted, so you can't
+accidentally drop a date. The tool prints how many no-shift dates fell in your window.
+
 ### Target-FTE tab (optional)
 
 To weight fair share by each person's dedication, point the tool at a tab holding

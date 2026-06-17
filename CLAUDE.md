@@ -50,6 +50,14 @@ from the rotation** — never scheduled and never counted in any fair-share aver
 occasional coverers who aren't official rotation members). The CLI reports who it excluded. Markers
 live in `parser.LayoutConfig` (`avail_label`, `inactive_label`).
 
+**No-shift periods (`Requires support?` row).** A per-date checkbox row labelled **`Requires
+support?`** (the parser finds it by that column-A label, not a fixed index) flags nights when **no
+shift runs at all** (shutdowns/engineering): a **`FALSE`** cell marks a no-shift date. Those dates are
+excluded from block enumeration entirely — **neither proposed nor flagged "unfilled"** (intentionally
+empty ≠ wanted-a-person-but-found-none) — and never seed the tallies. Only an explicit `FALSE` counts,
+so a missing/unticked marker never silently drops a date. Lives in `parser.LayoutConfig.support_label`
+(set `""` to disable). Checkboxes read as booleans (`TRUE`/`FALSE`).
+
 **Target FTE (separate tab).** Each person has a target **FTE** (`Target Fraction of Time` — fraction
 of full-time dedicated to shifts) that makes fair share proportional rather than an equal split — a
 50% person targets about half the shifts of a 100% person. FTE lives in its **own tab**, the live
@@ -130,6 +138,7 @@ All policy lives in `Settings` (config.py), not scattered in code:
 | Minimum rest = 2 rotations (hard) + maximize spacing (soft) | `min_rest_rotations = 2`, `w_spacing` |
 | Review-first output, never live rows | `output_target = "proposed_column"` |
 | Proposal written to a SupSci-shaped duplicate tab | `proposal_tab_name`, `proposal_token = "S"` |
+| No-shift dates skipped via the `Requires support?` row | `LayoutConfig.support_label` |
 
 **Goal of the scoring:** minimize the spread (variance) of per-person load across scientists.
 

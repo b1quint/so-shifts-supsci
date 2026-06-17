@@ -149,18 +149,37 @@ support; identity comes from the row, not the token — initials live in col B b
 - Tests: planner in `test_writeback.py`, `index_grid` in `test_parser.py`, write path + the live-tab
   guard + dry-run in `test_sheets.py`, flags in `test_cli.py`. 123 tests, ruff clean.
 
-## Next — remaining follow-up (point 3 of 2026-06-16)
+## No-shift periods — DONE (2026-06-17)
 
-3. **No-shift periods.** Rare windows where **no shift runs at all** (shutdowns/engineering). Need a
-   way to **flag** them so the tool skips them — neither proposing nor flagging as "unfilled — no
-   candidate" (intentionally empty ≠ wanted-a-person-but-found-none). Likely a marker row/range the
-   parser reads and `engine/blocks.py` excludes from enumeration.
+Point 3 built, committed (`5c54614`), and live-verified. **All three 2026-06-16 follow-ups are now
+done.** The user added a per-date checkbox row **`Requires support?`** (row 26 on the live sheet),
+`TRUE` normally, `FALSE` on nights needing no shift (shutdown/engineering).
+
+- **`io/parser`** finds the row by its column-A label (robust to row moves), reads `FALSE` cells into
+  `ParsedSheet.no_shift`. Only explicit `FALSE` counts; `support_label=""` disables.
+- **`engine/greedy.propose`** new `no_shift` arg, unioned with `filled` before enumeration: breaks
+  blocks around the gap, never flags it unfilled, never seeds tallies.
+- **`cli`** threads `parsed.no_shift` and reports the in-window count/range.
+- Live: the sheet currently marks **2026-08-17 → 2026-08-21** no-shift; the Q3 dry-run skips them and
+  blocks jump the shutdown (Aug 11-14 → Aug 22-25). Tests in `test_parser.py` + `test_greedy.py`.
+  128 tests, ruff clean.
+
+## ⚠ Cleanup pending — stale writes in `SupSci Shift Proposal`
+
+The first live write (56 cells, the 14-block proposal) happened **before** row 26 existed, so it wrote
+`S` on **2026-08-17 → 2026-08-21** (now no-shift) and on old block boundaries the no-shift-aware
+proposal no longer makes (e.g. Tiago Aug 15-18, Erik Aug 19-22). The writeback only fills *empty* cells
+and never clears, so a re-run won't remove them. The Q3 gap was empty before the first write, so every
+`S` currently in the 2026-08-03 → 2026-09-30 shift cells is tool-written and safe to clear. **TODO:
+clear those cells, then re-run `--out-tab` for the window** to land the corrected (no-shift-aware)
+proposal — the current dry-run is 13 blocks / would-write 38 (the rest already present, some stale).
 
 ## Other follow-ups (lower priority)
 
 - **Tune weights** in `Settings` against real numbers (e.g. slight Tiago overshoot); revisit
   whether short block remainders should be *flagged* rather than dropped.
-- When scheduling October, start the window at **2026-10-02** (Oct 1 is taken by the last Sep block).
+- A **clear/rewrite** option for the proposal tab would make re-runs clean (current writeback is
+  fill-empty-only by design); worth adding now that no-shift edits can change an already-written window.
 
 ## Commits
 
