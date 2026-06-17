@@ -13,7 +13,10 @@ for the 0-indexed values this module uses):
 * **Column A** — person name, merged vertically across that person's two rows.
 * **Column B** — person initials (used elsewhere as the "who is covering"
   token); merged vertically. Captured but unused by v1 logic.
-* **Column C** — static ``avail`` / ``shift`` labels. Ignored.
+* **Column C** — per-row ``Avail`` / ``Shift`` label. Used as the roster gate:
+  a real availability row carries ``Avail`` here, which is how we tell a
+  scientist's row from sentinel/divider rows (``Science Support``, ``(keep these
+  rows empty)``) that also have text in column A.
 * **Column D onward** — the calendar, one date per column, to the sheet's end.
 * **Row 1** — month header (merged per month). Ignored.
 * **Row 2** — the date for each calendar column.
@@ -60,7 +63,9 @@ class LayoutConfig:
     rows_per_person: int = 2  # availability row + shift row
     name_col: int = 0  # column A
     initials_col: int = 1  # column B (captured, unused in v1)
+    label_col: int = 2  # column C: per-row "Avail"/"Shift" marker
     first_date_col: int = 3  # column D: first calendar column
+    avail_label: str = "Avail"  # marks a real availability row; "" disables the gate
 
 
 # Module-level default so it is not constructed in a function signature (B008).
@@ -131,6 +136,21 @@ def _is_assigned(cell: str) -> bool:
     return bool(cell) and cell != "-"
 
 
+def _is_person_row(rows: Sequence[Sequence[str]], r: int, layout: LayoutConfig) -> bool:
+    """True if row ``r`` is a real person's availability row.
+
+    Requires a non-empty name and, when ``layout.avail_label`` is set, the
+    ``Avail`` marker in the label column. The marker is what distinguishes a
+    scientist's row from sentinel/divider rows that also carry text in column A
+    (e.g. ``Science Support``, ``(keep these rows empty)``).
+    """
+    if not _cell(rows, r, layout.name_col):
+        return False
+    if not layout.avail_label:
+        return True
+    return _cell(rows, r, layout.label_col).casefold() == layout.avail_label.casefold()
+
+
 def parse_grid(
     rows: Sequence[Sequence[str]],
     *,
@@ -141,8 +161,9 @@ def parse_grid(
 
     ``dates`` may be supplied already-resolved (recommended until the live date
     encoding is confirmed); otherwise they are read from the date row via
-    :func:`parse_date_row`. People are read in row order; iteration stops at the
-    first row with a blank name (merged blanks / end of roster).
+    :func:`parse_date_row`. Person rows are identified by the ``Avail`` marker in
+    the label column (see :func:`_is_person_row`); non-person rows are skipped, so
+    sentinel/divider rows never become phantom candidates.
     """
     layout = layout or _DEFAULT_LAYOUT
     if dates is None:
@@ -156,12 +177,10 @@ def parse_grid(
     codes: dict[tuple[Person, date], Code] = {}
     existing: dict[Person, list[date]] = {}
 
-    r = layout.first_person_row
-    while True:
-        name = _cell(rows, r, layout.name_col)
-        if not name:
-            break
-        person = Person(name=name)
+    for r in range(layout.first_person_row, len(rows), layout.rows_per_person):
+        if not _is_person_row(rows, r, layout):
+            continue
+        person = Person(name=_cell(rows, r, layout.name_col))
         people.append(person)
 
         avail_row = r

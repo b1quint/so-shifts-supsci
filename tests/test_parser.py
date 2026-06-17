@@ -107,7 +107,8 @@ def test_roster_stops_at_first_blank_name():
 
 def test_custom_layout_is_honored():
     # A trimmed grid with no header rows and the calendar at column index 1.
-    layout = LayoutConfig(date_row=0, first_person_row=1, first_date_col=1)
+    # avail_label="" disables the label gate (there is no label column here).
+    layout = LayoutConfig(date_row=0, first_person_row=1, first_date_col=1, avail_label="")
     grid = [
         ["", "2026-06-01", "2026-06-02"],
         ["Ann", "A", "X"],
@@ -117,3 +118,24 @@ def test_custom_layout_is_honored():
     assert parsed.grid.people == (ANN,)
     assert parsed.grid.code(ANN, D2) is Code.X
     assert parsed.existing == {ANN: [date(2026, 6, 2)]}
+
+
+def test_sentinel_rows_without_avail_label_are_not_people():
+    # Mirrors the live sheet: a divider row carries a name in column A but no
+    # "Avail" marker in column C, and must never become a phantom candidate.
+    grid = [
+        ["", "", "", "2026-06-01", "2026-06-02", "2026-06-03"],  # row 0: dates
+        ["", "", "", "", "", ""],
+        ["", "", "", "", "", ""],
+        ["", "", "", "", "", ""],
+        ["", "", "", "", "", ""],
+        ["Ann", "AB", "Avail", "A", "A", "A"],  # real person
+        ["", "", "Shift", "", "", ""],
+        ["(keep these rows empty)", "-", "", "", "", ""],  # sentinel: no "Avail"
+        ["", "!", "", "X", "X", "X"],  # its "shift" row would otherwise fill dates
+    ]
+    layout = LayoutConfig(date_row=0)
+    parsed = parse_grid(grid, layout=layout)
+    assert parsed.grid.people == (ANN,)
+    assert Person("(keep these rows empty)") not in parsed.grid.people
+    assert parsed.existing == {}  # the sentinel's row must not fill any date
