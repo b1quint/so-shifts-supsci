@@ -1,0 +1,31 @@
+# --- Secrets & identifiers (NEVER commit) ---------------------------------
+# Spreadsheet id, OAuth client secrets, and cached tokens must stay local.
+.env
+*.env
+client_secret*.json
+credentials.json
+token.json
+authorized_user.json
+*.token
+
+# --- uv / virtualenv ------------------------------------------------------
+# uv.lock IS committed (reproducible installs); only the venv is ignored.
+.venv/
+
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# --- Generated output -----------------------------------------------------
+# The CLI writes the proposal here by default; it is a build artifact.
+/proposal.csv
+
+# --- OS / editor ----------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
