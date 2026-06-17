@@ -4,9 +4,10 @@ Python tool that reads the SupSci availability spreadsheet and produces a **prop
 shift calendar for review. It does **not** run the live schedule — it fills currently-empty
 dates and a human reviews the proposal before it becomes real.
 
-**Source of truth for design & decisions:** the project's internal Confluence page (link kept
-out of this public repo; ask a maintainer). When implementation diverges from that page, update
-the page (or note it here) — don't let them drift.
+**Source of truth for design & decisions:** the [`docs/`](docs/) folder (migrated from the
+project's internal Confluence space). A single short Confluence page now just points back here.
+When implementation diverges from the docs, update the relevant page in `docs/` — don't let them
+drift.
 
 Sub-tool of the Unified Scheduling Tool project; aligns with the
 [`rso_shift_scheduler`](https://github.com/b1quint/rso_shift_scheduler) repo and a future
