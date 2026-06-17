@@ -92,13 +92,32 @@ Ran end-to-end against the real sheet (`SHIFT_SHEET_ID` + cached OAuth). Confirm
 Sheets-serial date handling. Child page *Requirements & Data Model* = 1790214149 (not yet touched).
 Reachable via the Atlassian MCP in interactive sessions (read/write Confluence + Jira).
 
-## Next — to tackle tomorrow (user's three points, 2026-06-16)
+## FTE-weighted fair share — DONE (2026-06-17)
 
-1. **Per-person target FTE %.** Each person has a target fraction of full-time dedication to shifts,
-   living in **another tab** (tool must read it). Make fair share **FTE-weighted** instead of equal
-   split — 50% FTE → ~half the shifts of 100%. Touches `io/` (new adapter for the FTE tab) +
-   `engine/tallies.py` (fair-share target = FTE-weighted, not `total / N`). "We will have to
-   interact" = read from that tab.
+Point 1 of the three follow-ups is built and committed on `mvp-v1` (112 tests, ruff clean):
+
+- **`engine/tallies.py`** — fair-share target is now `total * fte_person / sum(fte)` instead of a
+  flat `total / N`. A person with no FTE entry defaults to weight `1.0`, so omitting FTE reproduces
+  the old equal split exactly; deficits still sum to zero; non-positive FTE rejected. `Tallies.empty`
+  gained an `fte=` arg; `greedy.propose` gained an `fte=` arg. (Commit `1aedc91`.)
+- **`io/fte.py`** (new pure adapter) — parses a two-column FTE tab (name + target FTE %) into
+  `{Person: weight}`. `parse_fte_value` accepts `"50%"`, a bare percent (`50`→0.5), and the fraction
+  a percent cell yields when fetched unformatted (`0.5`); always returns a 0-1 fraction. Layout in
+  `FteLayout` (default: name col A, FTE col B, data from row 2). Names are the **join key** to the
+  roster. (Commit `8937563`.)
+- **`io/sheets.py`** — `read_fte_grid` / `load_fte`; `open_worksheet` now takes a tab name.
+  **`config.py`** — `fte_tab_name` (None ⇒ equal split). **`cli.py`** — `--fte-tab` flag; warns on
+  name-join gaps both ways (roster member with no FTE → defaults 1.0; FTE name matching no member).
+- **Tests** — FTE math in `test_tallies.py`, parser in `test_fte.py`, adapter in `test_sheets.py`,
+  and an end-to-end `test_cli.py` case where the FTE tab *flips* a pick an equal split would make
+  the other way. Docs (CLAUDE.md, README) updated.
+
+**Still open before a live FTE run:** confirm the real FTE tab's name + layout (built against the
+default name-col-A / FTE-col-B / row-2; user said they'd describe it but specifics not yet given),
+then run end-to-end with `--fte-tab`. Confluence page not yet updated for this feature.
+
+## Next — remaining follow-ups (points 2 & 3 of 2026-06-16)
+
 2. **Output to a dedicated tab.** Push the proposal into a **separate tab** the user will create
    (not a column in `SupSci`, not just CSV). Implements `output/writeback.py`'s `proposed_column`
    path against that tab; live `SupSci` rows still never touched.

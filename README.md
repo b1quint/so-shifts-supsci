@@ -16,7 +16,9 @@ For every empty 4-day block in the window you choose, it picks the best-availabl
 scientist using a simple, explainable scoring rule:
 
 - **Fairness** — favors people who are below their fair share of total shifts and
-  of weekend shifts (measured over the year and the calendar quarter).
+  of weekend shifts (measured over the year and the calendar quarter). Fair share is
+  **FTE-weighted** when a target-FTE tab is supplied (`--fte-tab`): a 50%-FTE person
+  targets about half the shifts of a 100% one. Without it, fair share is an equal split.
 - **Rest** — never schedules anyone with less than 2 rotations of rest since their
   last shift, and otherwise prefers whoever has rested longest.
 - **Preferences** — treats a `?` (tentative) day as a small penalty.
@@ -130,6 +132,7 @@ This prints a review report and writes `proposal.csv` in the current folder.
 | `--csv PATH` | `proposal.csv` | Where to write the CSV. |
 | `--sheet-id ID` | `$SHIFT_SHEET_ID` | Spreadsheet id (overrides the env var). |
 | `--tab NAME` | `SupSci` | Worksheet/tab to read. |
+| `--fte-tab NAME` | none | Tab of per-person target FTE %; enables FTE-weighted fair share. |
 
 If you omit the window, the whole calendar in the sheet is considered.
 
@@ -176,6 +179,17 @@ the right way to handle a non-rotation person — do **not** fill their row with
 If your sheet differs, the positions live in one place — `LayoutConfig` in
 [shift_proposer/io/parser.py](shift_proposer/io/parser.py) — and can be adjusted.
 
+### Target-FTE tab (optional)
+
+To weight fair share by each person's dedication, add a separate tab listing the
+**name** and **target FTE** of every rotation member, and point the tool at it with
+`--fte-tab NAME`. Default layout: **name in column A, FTE in column B, data from row
+2** (row 1 is a header). Write the FTE as a percent (`100%`, `50%`). Names must match
+the SupSci tab exactly — that's the join key, and the tool warns about any name it
+can't match (anyone missing simply defaults to 100%). Positions are configurable in
+`FteLayout` in [shift_proposer/io/fte.py](shift_proposer/io/fte.py). Without `--fte-tab`,
+fair share is a plain equal split.
+
 ### Availability codes
 
 | Code | Meaning | Effect |
@@ -196,6 +210,7 @@ All knobs live in one place: the `Settings` dataclass in
 - weights: `w_total = 1.0`, `w_weekend = 1.0`, `w_spacing = 0.1`, `w_question = 0.5`
 - `quarter_seed = "carry_deviation"` (how the quarterly weekend fairness carries
   over from the previous quarter)
+- `fte_tab_name = None` (set via `--fte-tab` to weight fair share by target FTE)
 
 These are starting points — tune them once you've seen real proposals.
 
@@ -205,7 +220,7 @@ These are starting points — tune them once you've seen real proposals.
 
 - **Read-only output.** It writes a CSV; it does **not** modify the live sheet.
   Writing proposals into a separate column on the sheet is planned, not built.
-- **SupSci tab only**, run manually.
+- **SupSci tab** (plus the optional FTE tab), run manually.
 - The date encoding in row 2 is read as a real date. If your sheet stores only a
   bare day-of-month there, the tool will stop with a clear "ambiguous date" error
   — open an issue or adjust the parser to supply the year.

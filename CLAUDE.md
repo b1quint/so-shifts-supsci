@@ -50,6 +50,14 @@ from the rotation** — never scheduled and never counted in any fair-share aver
 occasional coverers who aren't official rotation members). The CLI reports who it excluded. Markers
 live in `parser.LayoutConfig` (`avail_label`, `inactive_label`).
 
+**Target FTE (separate tab).** Each person has a target **FTE** (fraction of full-time dedicated to
+shifts) that makes fair share proportional rather than an equal split — a 50% person targets about
+half the shifts of a 100% person. FTE lives in its **own tab** (a two-column `name` + `FTE %` list),
+read by the `io/fte.py` adapter and keyed back to the roster by **name** (the join key — a typo
+silently drops a weight, so the CLI warns on mismatches in both directions). Enabled by pointing
+`Settings.fte_tab_name` at that tab (CLI `--fte-tab`); when unset, fair share falls back to the equal
+split. Layout is configurable in `fte.FteLayout` (default: name col A, FTE col B, data from row 2).
+
 ## Architecture — pure core behind an I/O boundary
 
 The single load-bearing decision: **`engine/` imports nothing from `gspread` or the filesystem.**
@@ -64,13 +72,14 @@ shift_proposer/
 ├── models.py         # PURE domain types: Person, Code(enum), AvailabilityGrid, Block,
 │                     #   Assignment, Proposal, Rationale
 ├── io/
-│   ├── sheets.py     # gspread + OAuth: SupSci tab <-> raw cell grid (ONLY gspread import)
-│   └── parser.py     # raw grid -> AvailabilityGrid + existing Assignments; A/AS/AR/- -> available
+│   ├── sheets.py     # gspread + OAuth: SupSci + FTE tabs <-> raw cell grid (ONLY gspread import)
+│   ├── parser.py     # raw grid -> AvailabilityGrid + existing Assignments; A/AS/AR/- -> available
+│   └── fte.py        # raw FTE tab -> {Person: weight} (target FTE %, keyed by name)
 ├── engine/           # PURE. no gspread, no I/O. domain objects in, Proposal out.
 │   ├── blocks.py     # enumerate unfilled 4-day blocks in window, date order; blocks float freely
 │   ├── eligibility.py# hard rules: skip filled, reject any 'X', enforce >=2-rotation rest
 │   ├── tallies.py    # shift-days + weekend-days on 2 horizons (YTD + calendar quarter w/
-│   │                 #   carry-over); per-person last-shift date; fair-share targets
+│   │                 #   carry-over); per-person last-shift date; FTE-weighted fair-share targets
 │   ├── scoring.py    # score(person, block, tallies) -> float + per-term breakdown
 │   └── greedy.py     # loop: block -> eligible -> score -> pick (stable tie-break) -> update
 └── output/
@@ -89,6 +98,8 @@ for each unfilled 4-day block in the window, in date order:
                + w_weekend  * (how far below fair-share of weekends, YTD + current quarter*)
                + w_spacing  * (days since their last shift)        # maximize rest
                - w_question * (number of '?' days in this block)
+        # fair-share target is FTE-weighted: total * fte_person / sum(fte),
+        # not a flat total / n_people (equal FTE reduces to the equal split).
     if no candidate: leave block unfilled and FLAG it (never violate rest)
     else: assign highest-scoring candidate (stable tie-break)
     update tallies (shift-days, weekend-days by calendar quarter, last-shift date)
@@ -109,6 +120,7 @@ All policy lives in `Settings` (config.py), not scattered in code:
 | `?` penalized but eligible | `w_question` |
 | 4-day blocks float freely (no weekday anchor) | `block_align = "float"` |
 | Fairness over YTD **and** calendar quarter | `quarter_mode = "calendar"` |
+| Fair share FTE-weighted (equal-split fallback) | `fte_tab_name` (None ⇒ equal split) |
 | Quarter seeded from prior quarter (not reset cold) | `quarter_seed = "carry_deviation"` |
 | Minimum rest = 2 rotations (hard) + maximize spacing (soft) | `min_rest_rotations = 2`, `w_spacing` |
 | Review-first output, never live rows | `output_target = "proposed_column"` |
