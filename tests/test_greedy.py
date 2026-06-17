@@ -32,9 +32,17 @@ def make_grid(dates, codes=None) -> AvailabilityGrid:
 
 
 def test_no_blocks_yields_empty_proposal():
-    proposal = propose(make_grid(days(MON, 3)), SETTINGS)  # too short for a block
+    proposal = propose(make_grid([]), SETTINGS)  # no candidate dates -> no blocks
     assert proposal.assignments == ()
     assert proposal.unfilled == ()
+
+
+def test_short_run_is_covered_by_a_short_block():
+    # A 2-day run is shorter than shift_len but still gets covered (min_shift_len=1).
+    window = days(MON, 2)
+    proposal = propose(make_grid(window), SETTINGS)
+    assert len(proposal.assignments) == 1
+    assert proposal.assignments[0].block.dates == tuple(window)
 
 
 def test_single_block_picks_lowest_name_when_all_tied():
@@ -91,13 +99,17 @@ def test_underloaded_person_is_preferred():
 
 
 def test_no_shift_dates_are_excluded_not_proposed_or_flagged():
-    # 8-day window; mark days 4-5 (indices 3,4) as no-shift -> they split the run
-    # into two stretches of 3 days each, neither long enough for a 4-day block.
+    # 8-day window; mark days 4-5 (indices 3,4) as no-shift. The surrounding
+    # 3-day stretches are still covered (short blocks), but the no-shift dates
+    # themselves are never proposed and never flagged.
     window = days(MON, 8)
     no_shift = [window[3], window[4]]
     proposal = propose(make_grid(window), SETTINGS, no_shift=no_shift)
-    assert proposal.assignments == ()  # no full block survives the gap
-    assert proposal.unfilled == ()  # excluded dates are never flagged
+    covered = {d for a in proposal.assignments for d in a.block.dates}
+    flagged = {d for b in proposal.unfilled for d in b.dates}
+    assert not ({window[3], window[4]} & covered)  # no-shift never proposed
+    assert not ({window[3], window[4]} & flagged)  # no-shift never flagged
+    assert covered == {*window[0:3], *window[5:8]}  # the two stretches are covered
 
 
 def test_no_shift_only_breaks_blocks_does_not_seed_load():

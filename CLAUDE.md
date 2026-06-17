@@ -89,7 +89,7 @@ shift_proposer/
 │   ├── parser.py     # raw grid -> AvailabilityGrid + existing Assignments; A/AS/AR/- -> available
 │   └── fte.py        # raw FTE tab -> {Person: weight} (target FTE %, keyed by name)
 ├── engine/           # PURE. no gspread, no I/O. domain objects in, Proposal out.
-│   ├── blocks.py     # enumerate unfilled 4-day blocks in window, date order; blocks float freely
+│   ├── blocks.py     # enumerate unfilled blocks in window (shift_len, short tail >= min_shift_len)
 │   ├── eligibility.py# hard rules: skip filled, reject any 'X', enforce >=2-rotation rest
 │   ├── tallies.py    # shift-days + weekend-days on 2 horizons (YTD + calendar quarter w/
 │   │                 #   carry-over); per-person last-shift date; FTE-weighted fair-share targets
@@ -103,8 +103,10 @@ shift_proposer/
 ## Algorithm (greedy + scoring)
 
 ```
-for each unfilled 4-day block in the window, in date order:
-    candidates = people available on all 4 days (A/AS/AR/- ok; no 'X')
+# runs of consecutive unfilled days are chopped into shift_len blocks; a leftover
+# run >= min_shift_len is still proposed as a SHORT block (default min_shift_len=1).
+for each unfilled block in the window, in date order:
+    candidates = people available on all its days (A/AS/AR/- ok; no 'X')
                  AND past their minimum rest (>= 2 rotations since last shift)
     for each candidate:
         score =  w_total    * (how far below fair-share of total shifts, YTD)
@@ -132,6 +134,7 @@ All policy lives in `Settings` (config.py), not scattered in code:
 | `A/AS/AR/-` all "available" | `available_codes = {A, AS, AR, -}` |
 | `?` penalized but eligible | `w_question` |
 | 4-day blocks float freely (no weekday anchor) | `block_align = "float"` |
+| Short shifts allowed (cover leftover runs < shift_len) | `min_shift_len = 1` |
 | Fairness over YTD **and** calendar quarter | `quarter_mode = "calendar"` |
 | Fair share FTE-weighted (equal-split fallback) | `fte_tab_name` (None ⇒ equal split) |
 | Quarter seeded from prior quarter (not reset cold) | `quarter_seed = "carry_deviation"` |

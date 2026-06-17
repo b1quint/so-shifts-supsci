@@ -12,8 +12,9 @@ the reasoning behind each decision, see [CLAUDE.md](CLAUDE.md).
 
 ## What it does
 
-For every empty 4-day block in the window you choose, it picks the best-available
-scientist using a simple, explainable scoring rule:
+For every empty block in the window you choose — ideally 4 nights, but a leftover
+run is still covered as a shorter shift (down to `min_shift_len`, default 1) — it
+picks the best-available scientist using a simple, explainable scoring rule:
 
 - **Fairness** — favors people who are below their fair share of total shifts and
   of weekend shifts (measured over the year and the calendar quarter). Fair share is
@@ -226,7 +227,9 @@ Without `--fte-tab`, fair share is a plain equal split.
 All knobs live in one place: the `Settings` dataclass in
 [shift_proposer/config.py](shift_proposer/config.py). Defaults:
 
-- `shift_len = 4` (days per block), `min_rest_rotations = 2` (hard rest rule)
+- `shift_len = 4` (ideal days per block), `min_shift_len = 1` (smallest short
+  shift used to cover a leftover run; set to `shift_len` to require full blocks)
+- `min_rest_rotations = 2` (hard rest rule)
 - weights: `w_total = 1.0`, `w_weekend = 1.0`, `w_spacing = 0.1`, `w_question = 0.5`
 - `quarter_seed = "carry_deviation"` (how the quarterly weekend fairness carries
   over from the previous quarter)

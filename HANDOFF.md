@@ -57,8 +57,9 @@ following its suggested build order.
 - Count unit = **shift-days**.
 - Fair share = **equal split** (`total / N`).
 - `quarter_seed` = **carry_deviation**.
-- blocks: short remainders (< `shift_len`) **silently dropped** — OK'd for review; revisit if
-  remainders should be *flagged* instead.
+- blocks: a leftover run shorter than `shift_len` is now **covered as a short shift** (>=
+  `min_shift_len`, default 1) — see the *Short shifts* section below. (Originally these remainders were
+  dropped.)
 
 ## First live run — DONE (2026-06-16)
 
@@ -164,15 +165,28 @@ done.** The user added a per-date checkbox row **`Requires support?`** (row 26 o
   blocks jump the shutdown (Aug 11-14 → Aug 22-25). Tests in `test_parser.py` + `test_greedy.py`.
   128 tests, ruff clean.
 
+## Short shifts — DONE (2026-06-17)
+
+Beyond the original three follow-ups. The ideal block is still `shift_len` (4 nights), but a leftover
+run shorter than that is now **proposed as a short block** instead of dropped, so short gaps get
+covered (user need: Aug 15-16 had no support). `engine/blocks.enumerate_blocks` now chops each run
+front-to-back into `shift_len` blocks and emits a trailing short block when the remainder is >=
+`min_shift_len` (new `Settings.min_shift_len`, default **1** = cover down to a single night; set it to
+`shift_len` to require full blocks only). `greedy.propose` passes it through. Live Q3 re-run: **Aug
+15-16 now covered (Tiago, a 2-night block)**; downstream picks shifted because the short block adds
+load. Tests in `test_blocks.py` + `test_greedy.py` (3 old "drop the tail" tests updated to the new
+policy). 131 tests, ruff clean. **NOTE: Confluence NOT yet updated for short shifts (user asked to
+hold).** Commit: see git log.
+
 ## Cleanup of stale writes — DONE (2026-06-17)
 
 The first live write (56 cells, pre-row-26) had stale `S` on the Aug 17-21 shutdown and on old block
-boundaries. Fixed: cleared all 56 tool-written `S` cells in 2026-08-03 → 2026-09-30 (verified they were
-the only non-empty values there — safe), then re-ran `--out-tab` for the window. **`SupSci Shift
-Proposal` now holds the corrected no-shift-aware proposal: 52 `S` cells (13 blocks × 4), zero on
-2026-08-17 → 2026-08-21** (verified by read-back). Per-person: Tiago 16, Elana 12, David 8, HyeYun 8,
-Bruno 4, Erik 4. (One-off clear via a maintenance script; the tool's writeback stays fill-empty-only —
-see the lower-priority clear/rewrite-mode follow-up.)
+boundaries. Fixed: cleared the tool-written `S` cells in 2026-08-03 → 2026-09-30 (verified they were the only
+non-empty values there — safe), then re-ran `--out-tab`. After the short-shift change it was cleared
+and rewritten once more. **`SupSci Shift Proposal` now holds the final proposal: 54 `S` cells (13
+four-night blocks + the Aug 15-16 short block), Aug 15-16 covered by Tiago, zero on the 2026-08-17 →
+2026-08-21 shutdown** (verified by read-back). (One-off clear via `/tmp/clear_q3.py`; the tool's
+writeback stays fill-empty-only — see the lower-priority clear/rewrite-mode follow-up.)
 
 ## Other follow-ups (lower priority)
 

@@ -1,8 +1,9 @@
 """Step-3 tests for engine/blocks — enumerating unfilled shift-length blocks.
 
 Pure: hand-built date ranges + a set of already-filled dates. Blocks float
-freely (no weekday anchor); only full shift_len runs of *consecutive calendar
-days* become blocks, in date order. A short tail (< shift_len) forms no block.
+freely (no weekday anchor); runs of *consecutive calendar days* are chopped
+into shift_len blocks, in date order, and a leftover >= min_shift_len is emitted
+as a short block (min_shift_len defaults to 1, so short gaps are covered).
 """
 
 from datetime import date, timedelta
@@ -33,18 +34,28 @@ def test_run_chops_into_consecutive_full_blocks():
     assert [b.dates for b in blocks] == [tuple(window[0:4]), tuple(window[4:8])]
 
 
-def test_short_tail_forms_no_block():
-    window = days(MON, 5)  # one full block + a 1-day remainder
+def test_short_tail_becomes_a_short_block_by_default():
+    window = days(MON, 6)  # one full block + a 2-day remainder
     blocks = enumerate_blocks(window, filled=set(), shift_len=4)
-    assert len(blocks) == 1
-    assert blocks[0].dates == tuple(window[0:4])
-    # the trailing day is intentionally left uncovered
-    assert window[4] not in {d for b in blocks for d in b.dates}
+    assert [b.dates for b in blocks] == [tuple(window[0:4]), tuple(window[4:6])]
 
 
-def test_run_shorter_than_shift_len_yields_no_blocks():
+def test_run_shorter_than_shift_len_becomes_one_short_block():
     blocks = enumerate_blocks(days(MON, 3), filled=set(), shift_len=4)
-    assert blocks == []
+    assert [b.dates for b in blocks] == [tuple(days(MON, 3))]
+
+
+def test_min_shift_len_drops_tails_below_the_floor():
+    window = days(MON, 6)  # 4-day block + a 2-day tail
+    # With a floor of 3, the 2-day tail is too short and is dropped.
+    blocks = enumerate_blocks(window, filled=set(), shift_len=4, min_shift_len=3)
+    assert [b.dates for b in blocks] == [tuple(window[0:4])]
+
+
+def test_min_shift_len_equal_to_shift_len_requires_full_blocks():
+    window = days(MON, 5)  # full block + 1-day tail
+    blocks = enumerate_blocks(window, filled=set(), shift_len=4, min_shift_len=4)
+    assert [b.dates for b in blocks] == [tuple(window[0:4])]
 
 
 def test_filled_date_splits_the_run():

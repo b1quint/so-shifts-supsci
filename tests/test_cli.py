@@ -173,14 +173,20 @@ def test_fte_tab_flips_the_pick_vs_equal_split():
 
 
 def test_propose_from_sheet_honors_the_window():
-    # Window keeps only 3 of the 4 dates -> no full 4-day block -> nothing to do.
+    # Window keeps only 3 of the 4 dates -> one short (3-day) block over exactly
+    # those dates (short shifts are allowed; the 4th date is outside the window).
     settings = Settings(
         sheet_id="SHEET123",
         window_start=date(2026, 6, 1),
         window_end=date(2026, 6, 3),
     )
     proposal = propose_from_sheet(settings, client=FakeClient(SHEET))
-    assert proposal.assignments == ()
+    assert len(proposal.assignments) == 1
+    assert proposal.assignments[0].block.dates == (
+        date(2026, 6, 1),
+        date(2026, 6, 2),
+        date(2026, 6, 3),
+    )
     assert proposal.unfilled == ()
 
 

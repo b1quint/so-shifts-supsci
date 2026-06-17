@@ -31,7 +31,11 @@ class Settings:
     """
 
     # --- shift / rest shape ------------------------------------------------
-    shift_len: int = 4
+    shift_len: int = 4  # ideal block length; a run is chopped into shift_len blocks
+    # Smallest block to still propose for a leftover run shorter than shift_len
+    # (so short shifts get covered, not dropped). 1 = cover everything down to a
+    # single night; set to shift_len to require full blocks only.
+    min_shift_len: int = 1
     min_rest_rotations: int = 2  # hard rule: >= 2 rotations since last shift
 
     # --- availability policy ----------------------------------------------
