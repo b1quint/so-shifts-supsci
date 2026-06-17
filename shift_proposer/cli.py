@@ -20,8 +20,8 @@ from pathlib import Path
 
 from shift_proposer.config import Settings
 from shift_proposer.engine.greedy import propose
-from shift_proposer.io.sheets import load_sheet
-from shift_proposer.models import AvailabilityGrid, Proposal
+from shift_proposer.io.sheets import load_fte, load_sheet
+from shift_proposer.models import AvailabilityGrid, Person, Proposal
 from shift_proposer.output.proposal import render_report
 from shift_proposer.output.writeback import write_csv
 
@@ -44,18 +44,49 @@ def select_window(
     return replace(grid, dates=dates)
 
 
+def _report_fte_coverage(people: tuple[Person, ...], fte: dict[Person, float]) -> None:
+    """Warn about name-join gaps between the FTE tab and the roster (stderr).
+
+    The person name is the join key between the two tabs, so a typo silently
+    drops a weight. Surface both directions: roster members with no FTE entry
+    (they default to weight 1.0) and FTE names that match no roster member.
+    """
+    missing = [p.name for p in people if p not in fte]
+    if missing:
+        print(
+            f"FTE: no entry for {', '.join(missing)} — defaulting to 1.0 (full-time).",
+            file=sys.stderr,
+        )
+    roster = set(people)
+    unmatched = [p.name for p in fte if p not in roster]
+    if unmatched:
+        print(
+            f"FTE: {', '.join(unmatched)} in the FTE tab match no roster member "
+            "(ignored — check for a name mismatch).",
+            file=sys.stderr,
+        )
+
+
 def propose_from_sheet(settings: Settings, *, client=None) -> Proposal:
-    """Read SupSci, apply the window, and return a :class:`Proposal`.
+    """Read SupSci (and the FTE tab if configured) and return a :class:`Proposal`.
 
     ``client`` is injectable so this whole pipeline can run against a fake sheet
     in tests; production passes ``None`` and OAuth runs inside ``load_sheet``.
+    When ``settings.fte_tab_name`` is set, fair share is FTE-weighted; otherwise
+    it is an equal split.
     """
     parsed = load_sheet(settings, client=client)
     if parsed.inactive:
         names = ", ".join(p.name for p in parsed.inactive)
         print(f"Excluded from rotation (marked Out): {names}", file=sys.stderr)
+
+    fte: dict[Person, float] | None = None
+    if settings.fte_tab_name:
+        fte = load_fte(settings, client=client)
+        _report_fte_coverage(parsed.grid.people, fte)
+
     grid = select_window(parsed.grid, settings.window_start, settings.window_end)
-    return propose(grid, settings, existing=parsed.existing)
+    return propose(grid, settings, existing=parsed.existing, fte=fte)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -78,6 +109,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="worksheet/tab name (default: SupSci)",
     )
     parser.add_argument(
+        "--fte-tab",
+        help="tab holding per-person target FTE %% (enables FTE-weighted fair share)",
+    )
+    parser.add_argument(
         "--window-start",
         type=date.fromisoformat,
         help="earliest date to propose (YYYY-MM-DD)",
@@ -96,6 +131,8 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         overrides["sheet_id"] = args.sheet_id
     if args.tab:
         overrides["tab_name"] = args.tab
+    if args.fte_tab:
+        overrides["fte_tab_name"] = args.fte_tab
     if args.window_start:
         overrides["window_start"] = args.window_start
     if args.window_end:

@@ -23,7 +23,9 @@ import gspread
 from gspread.utils import ValueRenderOption
 
 from shift_proposer.config import Settings
+from shift_proposer.io.fte import parse_fte_grid
 from shift_proposer.io.parser import ParsedSheet, parse_grid
+from shift_proposer.models import Person
 
 
 class _Worksheet(Protocol):
@@ -55,12 +57,14 @@ def authorize(settings: Settings) -> gspread.Client:
     return gspread.oauth()
 
 
-def open_worksheet(client: gspread.Client, settings: Settings) -> gspread.Worksheet:
-    """Open the configured SupSci tab; require an explicit spreadsheet id."""
+def open_worksheet(
+    client: gspread.Client, settings: Settings, tab_name: str | None = None
+) -> gspread.Worksheet:
+    """Open a tab by name (default ``settings.tab_name``); require a sheet id."""
     if not settings.sheet_id:
         raise ValueError("settings.sheet_id is required (set SHIFT_SHEET_ID).")
     spreadsheet = client.open_by_key(settings.sheet_id)
-    return spreadsheet.worksheet(settings.tab_name)
+    return spreadsheet.worksheet(tab_name or settings.tab_name)
 
 
 def read_raw_grid(settings: Settings, *, client: gspread.Client | None = None) -> list[list[str]]:
@@ -77,3 +81,19 @@ def read_raw_grid(settings: Settings, *, client: gspread.Client | None = None) -
 def load_sheet(settings: Settings, *, client: gspread.Client | None = None) -> ParsedSheet:
     """Read SupSci and parse it into the domain model — the adapter entrypoint."""
     return parse_grid(read_raw_grid(settings, client=client))
+
+
+def read_fte_grid(settings: Settings, *, client: gspread.Client | None = None) -> list[list[str]]:
+    """Authorize (unless a ``client`` is injected), open the FTE tab, fetch it."""
+    if not settings.sheet_id:
+        raise ValueError("settings.sheet_id is required (set SHIFT_SHEET_ID).")
+    if not settings.fte_tab_name:
+        raise ValueError("settings.fte_tab_name is required to load FTE weights.")
+    client = client or authorize(settings)
+    worksheet = open_worksheet(client, settings, settings.fte_tab_name)
+    return fetch_grid(worksheet)
+
+
+def load_fte(settings: Settings, *, client: gspread.Client | None = None) -> dict[Person, float]:
+    """Read the FTE tab and parse it into ``{Person: weight}``."""
+    return parse_fte_grid(read_fte_grid(settings, client=client))

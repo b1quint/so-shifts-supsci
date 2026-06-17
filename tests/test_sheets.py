@@ -13,9 +13,12 @@ from gspread.utils import ValueRenderOption
 from shift_proposer.config import Settings
 from shift_proposer.io.sheets import (
     fetch_grid,
+    load_fte,
     open_worksheet,
+    read_fte_grid,
     read_raw_grid,
 )
+from shift_proposer.models import Person
 
 
 class FakeWorksheet:
@@ -90,3 +93,46 @@ def test_read_raw_grid_uses_injected_client_end_to_end():
     grid = read_raw_grid(settings, client=client)
 
     assert grid == [["46184", "A"]]
+
+
+# --- FTE tab ---------------------------------------------------------------
+
+
+class FakeMultiTabSpreadsheet:
+    """A spreadsheet whose ``worksheet(name)`` returns a per-name fake."""
+
+    def __init__(self, by_name):
+        self._by_name = by_name
+        self.requested_tab = None
+
+    def worksheet(self, name):
+        self.requested_tab = name
+        return self._by_name[name]
+
+
+def test_read_fte_grid_requires_an_fte_tab_name():
+    # Sheet id present but no FTE tab configured: clear error, no OAuth.
+    with pytest.raises(ValueError, match="fte_tab_name is required"):
+        read_fte_grid(Settings(sheet_id="SHEET123", fte_tab_name=None))
+
+
+def test_read_fte_grid_opens_the_configured_fte_tab():
+    fte_ws = FakeWorksheet([["Name", "FTE"], ["Ann", "50%"]])
+    spreadsheet = FakeMultiTabSpreadsheet({"FTE": fte_ws})
+    client = FakeClient(spreadsheet)
+    settings = Settings(sheet_id="SHEET123", fte_tab_name="FTE")
+
+    grid = read_fte_grid(settings, client=client)
+
+    assert grid == [["Name", "FTE"], ["Ann", "50%"]]
+    assert spreadsheet.requested_tab == "FTE"
+
+
+def test_load_fte_parses_to_person_weights():
+    fte_ws = FakeWorksheet([["Name", "FTE"], ["Ann", "100%"], ["Bo", "50%"]])
+    client = FakeClient(FakeMultiTabSpreadsheet({"FTE": fte_ws}))
+    settings = Settings(sheet_id="SHEET123", fte_tab_name="FTE")
+
+    weights = load_fte(settings, client=client)
+
+    assert weights == {Person("Ann"): 1.0, Person("Bo"): 0.5}

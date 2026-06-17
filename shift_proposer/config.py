@@ -56,6 +56,8 @@ class Settings:
     # --- data source (identifiers loaded from env, never committed) --------
     sheet_id: str | None = None
     tab_name: str = "SupSci"
+    # FTE (target-dedication) tab; None disables FTE weighting (equal split).
+    fte_tab_name: str | None = None
 
     @classmethod
     def from_env(cls, **overrides) -> Settings:

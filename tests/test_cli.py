@@ -95,6 +95,77 @@ def test_propose_from_sheet_runs_end_to_end():
     assert proposal.unfilled == ()
 
 
+# --- FTE-weighted fair share (end-to-end through the FTE tab) ---------------
+
+
+class FakeMultiTabClient:
+    """A fake client serving a different grid per tab name."""
+
+    def __init__(self, by_tab):
+        self._by_tab = by_tab
+
+    def open_by_key(self, key):
+        client = self
+
+        class _SS:
+            def worksheet(self, name):
+                return FakeWorksheet(client._by_tab[name])
+
+        return _SS()
+
+
+# History (4 consecutive *weekdays*, so no weekend term) then an open weekday
+# block. Ann already took 3 of the 4 history days, Bo 1 -> on an equal split Bo
+# is further behind and wins the open block. Under a 90/10 FTE split Ann's target
+# is high enough that she is the one behind, so the pick flips to her.
+FTE_SHEET = [
+    ["", "", "", "", "", "", "", "", "", "", ""],  # month header
+    # Mon-Thu history (May 4-7) then Mon-Thu open block (Jun 1-4) — no weekends.
+    [
+        "",
+        "",
+        "",
+        "2026-05-04",
+        "2026-05-05",
+        "2026-05-06",
+        "2026-05-07",
+        "2026-06-01",
+        "2026-06-02",
+        "2026-06-03",
+        "2026-06-04",
+    ],  # fmt: skip
+    ["", "", "", "", "", "", "", "", "", "", ""],  # weekday
+    ["", "", "", "", "", "", "", "", "", "", ""],  # avail count
+    ["", "", "", "", "", "", "", "", "", "", ""],  # shift summary
+    ["Ann", "AB", "avail", "", "", "", "", "", "", "", ""],  # Ann availability
+    ["", "", "shift", "x", "x", "x", "", "", "", "", ""],  # Ann: May 4,5,6 assigned
+    ["Bo", "BC", "avail", "", "", "", "", "", "", "", ""],  # Bo availability
+    ["", "", "shift", "", "", "", "x", "", "", "", ""],  # Bo: May 7 assigned
+    ["", "", "", "", "", "", "", "", "", "", ""],  # end
+]
+
+FTE_TAB = [
+    ["Name", "FTE"],
+    ["Ann", "90%"],
+    ["Bo", "10%"],
+]
+
+
+def test_fte_tab_flips_the_pick_vs_equal_split():
+    window = dict(window_start=date(2026, 6, 1), window_end=date(2026, 6, 4))
+    client = FakeMultiTabClient({"SupSci": FTE_SHEET, "FTE": FTE_TAB})
+
+    # Equal split (no FTE tab): Bo is furthest behind -> Bo wins the open block.
+    equal = propose_from_sheet(Settings(sheet_id="S", **window), client=client)
+    assert [a.person for a in equal.assignments] == [BO]
+
+    # FTE-weighted (Ann 90%, Bo 10%): Ann's target outweighs her history -> Ann.
+    weighted = propose_from_sheet(
+        Settings(sheet_id="S", fte_tab_name="FTE", **window), client=client
+    )
+    assert [a.person for a in weighted.assignments] == [ANN]
+
+
 def test_propose_from_sheet_honors_the_window():
     # Window keeps only 3 of the 4 dates -> no full 4-day block -> nothing to do.
     settings = Settings(
@@ -124,3 +195,8 @@ def test_parse_args_reads_window_and_sheet_id():
     assert args.sheet_id == "XYZ"
     assert args.window_start == date(2026, 6, 1)
     assert args.window_end == date(2026, 6, 30)
+
+
+def test_parse_args_reads_fte_tab():
+    assert parse_args([]).fte_tab is None
+    assert parse_args(["--fte-tab", "FTE"]).fte_tab == "FTE"
