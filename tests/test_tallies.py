@@ -115,6 +115,62 @@ def test_total_deficit_is_zero_when_everyone_equal():
     assert t.total_deficit(ANN, asof) == pytest.approx(0.0)
 
 
+# --- FTE-weighted fair share -----------------------------------------------
+
+
+def test_no_fte_reproduces_equal_split():
+    """Omitting FTE weights gives every person weight 1.0 (equal split)."""
+    plain = Tallies.empty(PEOPLE, SETTINGS)
+    weighted = Tallies.empty(PEOPLE, SETTINGS, fte={p: 1.0 for p in PEOPLE})
+    asof = date(2026, 6, 16)
+    days = (date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3))
+    for t in (plain, weighted):
+        t.record_days(ANN, days)
+    for p in PEOPLE:
+        assert plain.total_deficit(p, asof) == pytest.approx(weighted.total_deficit(p, asof))
+
+
+def test_fte_target_is_proportional_to_weight():
+    """A half-FTE person's fair-share target is half a full-FTE person's."""
+    # Ann full-time, Bo full-time, Cai half-time. 6 shift-days total.
+    t = Tallies.empty(PEOPLE, SETTINGS, fte={ANN: 1.0, BO: 1.0, CAI: 0.5})
+    asof = date(2026, 6, 16)
+    t.record_days(ANN, (date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3)))
+    t.record_days(BO, (date(2026, 6, 8), date(2026, 6, 9), date(2026, 6, 10)))
+    # Targets: total 6 over weights {1,1,0.5}=2.5 -> Ann/Bo 2.4 each, Cai 1.2.
+    assert t.total_deficit(ANN, asof) == pytest.approx(6 * 1.0 / 2.5 - 3)
+    assert t.total_deficit(CAI, asof) == pytest.approx(6 * 0.5 / 2.5 - 0)
+    # Cai (half-time, did nothing) is below her smaller target; still a boost.
+    assert t.total_deficit(CAI, asof) > 0
+
+
+def test_fte_deficits_still_sum_to_zero():
+    t = Tallies.empty(PEOPLE, SETTINGS, fte={ANN: 1.0, BO: 0.75, CAI: 0.5})
+    asof = date(2026, 6, 16)
+    t.record_days(ANN, (date(2026, 6, 1), date(2026, 6, 2)))
+    t.record_days(BO, (date(2026, 6, 8),))
+    total = sum(t.total_deficit(p, asof) for p in PEOPLE)
+    assert total == pytest.approx(0.0)
+
+
+def test_full_timer_reaches_zero_deficit_at_twice_a_half_timers_load():
+    """A full-timer carrying 2x a half-timer's load is fair (both zero deficit)."""
+    t = Tallies.empty((ANN, CAI), SETTINGS, fte={ANN: 1.0, CAI: 0.5})
+    asof = date(2026, 6, 16)
+    # Ann (full) 2 days, Cai (half) 1 day -> proportional to weight -> fair.
+    t.record_days(ANN, (date(2026, 6, 1), date(2026, 6, 2)))
+    t.record_days(CAI, (date(2026, 6, 8),))
+    assert t.total_deficit(ANN, asof) == pytest.approx(0.0)
+    assert t.total_deficit(CAI, asof) == pytest.approx(0.0)
+
+
+def test_non_positive_fte_is_rejected():
+    with pytest.raises(ValueError, match="positive"):
+        Tallies.empty(PEOPLE, SETTINGS, fte={ANN: 0.0})
+    with pytest.raises(ValueError, match="positive"):
+        Tallies.empty(PEOPLE, SETTINGS, fte={BO: -0.5})
+
+
 # --- weekend deficit & quarter carry-over ----------------------------------
 
 

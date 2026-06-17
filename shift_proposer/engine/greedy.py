@@ -39,15 +39,18 @@ def propose(
     grid: AvailabilityGrid,
     settings: Settings,
     existing: Mapping[Person, Iterable[date]] | None = None,
+    fte: Mapping[Person, float] | None = None,
 ) -> Proposal:
     """Build a :class:`Proposal` for ``grid`` under ``settings``.
 
     ``existing`` maps each person to the dates they are *already* assigned on the
     sheet; those dates seed the fairness tallies and are treated as filled, so no
-    block is proposed over them. Returns the proposed assignments (date order)
-    plus any blocks left unfilled for lack of an eligible candidate.
+    block is proposed over them. ``fte`` maps a person to their target FTE weight
+    (fair share is proportional to it); omit it for an equal split. Returns the
+    proposed assignments (date order) plus any blocks left unfilled for lack of an
+    eligible candidate.
     """
-    tallies = Tallies.empty(grid.people, settings)
+    tallies = Tallies.empty(grid.people, settings, fte=fte)
     filled: set[date] = set()
     for person, dates in (existing or {}).items():
         seeded = tuple(dates)
