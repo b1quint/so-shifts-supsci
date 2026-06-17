@@ -71,18 +71,39 @@ Ran end-to-end against the real sheet (`SHIFT_SHEET_ID` + cached OAuth). Confirm
   future date filled → empty proposal. Fixed by gating person rows on the `Avail` label in column C
   (`LayoutConfig.label_col` / `avail_label`). Now 9 real people; e.g. Jul–Sep 2026 → 14 assignments.
 
+## `Out` marker + first real proposal — DONE (2026-06-16)
+
+- **Fairness sanity-check resolved.** The earlier skew was Brian Stalder — an occasional coverer not
+  in the official rotation — dragging down the fair-share mean. Added an **`Out`** roster marker
+  (column C): a person marked `Out` is kept in the sheet but excluded from scheduling AND the
+  fairness average. Brian + Kevin Fanning are now `Out`; parser returns `ParsedSheet.inactive` and
+  the CLI reports exclusions. (Commit `8d73509`.)
+- **Target window decided:** calendar is filled through 2026-08-02; the open gap is 2026-08-03 →
+  2027-01-31. First real proposal generated for **2026-08-03 → 2026-10-01** (extended one day so the
+  Sep 28 tail forms a full block): **15 assignments, 0 unfilled**. Load spread tightened (range
+  11→6, stdev 3.84→1.96); rest rule 100% respected (verified: all short gaps are pre-existing
+  history, none tool-caused).
+
+## Confluence design page — updated (source of truth)
+
+`Shift Calendar Proposal Generator`, page id **1789231127**, Bruno's personal space on
+`rubinobs.atlassian.net` (cloudId `34f7173f-c7ca-4a05-82c6-d7f88d2266ec`). Updated to **IMPLEMENTED
+— MVP**: resolved date-range (CLI args) + quarter-seed, added the `Out`/roster rule and the
+Sheets-serial date handling. Child page *Requirements & Data Model* = 1790214149 (not yet touched).
+Reachable via the Atlassian MCP in interactive sessions (read/write Confluence + Jira).
+
 ## Next — follow-ups
 
-1. **Sanity-check the fairness numbers.** First real run leaned heavily on one person (large YTD
-   total-deficit). Verify existing shifts are all being counted (name/initials matching on shift
-   rows) before trusting the weights.
-2. **`output/writeback.py` proposed-column path** — write back into a separate proposed column on
+1. **`output/writeback.py` proposed-column path** — write back into a separate proposed column on
    the sheet (`output_target = "proposed_column"`), now that the live layout is known.
-3. **Tune weights** in `Settings` against real numbers; revisit `quarter_seed` and whether short
-   block remainders should be *flagged* rather than dropped.
+2. **Tune weights** in `Settings` against real numbers (e.g. slight Tiago overshoot); revisit
+   `quarter_seed` and whether short block remainders should be *flagged* rather than dropped.
+3. When scheduling October, start the window at **2026-10-02** (Oct 1 is taken by the last Sep block).
 
 ## Commits
 
+- `8d73509` — output: 'Out' marker excludes non-rotation people (+ CLAUDE/README docs)
+- `1f3351b` — fix parser: gate roster on the 'Avail' label (live-sheet phantom-row bug)
 - `62ee494` — cli: wire Settings -> sheets -> engine -> output (step 6)
 - `a07da3b` — output/writeback: CSV export of a Proposal
 - `6c92911` — output/proposal: render Proposal as review report + rows
