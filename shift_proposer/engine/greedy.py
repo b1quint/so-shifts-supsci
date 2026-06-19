@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from datetime import date
 
-from shift_proposer.config import Settings
+from shift_proposer.config import MODE_COMPLETE, MODE_REBUILD, PROPOSAL_MODES, Settings
 from shift_proposer.engine.blocks import enumerate_blocks
 from shift_proposer.engine.eligibility import eligible_people
 from shift_proposer.engine.scoring import score
@@ -41,22 +41,43 @@ def propose(
     existing: Mapping[Person, Iterable[date]] | None = None,
     fte: Mapping[Person, float] | None = None,
     no_shift: Iterable[date] | None = None,
+    mode: str = MODE_COMPLETE,
 ) -> Proposal:
     """Build a :class:`Proposal` for ``grid`` under ``settings``.
 
     ``existing`` maps each person to the dates they are *already* assigned on the
-    sheet; those dates seed the fairness tallies and are treated as filled, so no
-    block is proposed over them. ``fte`` maps a person to their target FTE weight
-    (fair share is proportional to it); omit it for an equal split. ``no_shift``
-    lists dates that need no shift at all (shutdowns): they are excluded from block
-    enumeration — neither proposed nor flagged unfilled — but never seed the
-    tallies. Returns the proposed assignments (date order) plus any blocks left
-    unfilled for lack of an eligible candidate.
+    sheet. ``fte`` maps a person to their target FTE weight (fair share is
+    proportional to it); omit it for an equal split. ``no_shift`` lists dates that
+    need no shift at all (shutdowns): they are excluded from block enumeration —
+    neither proposed nor flagged unfilled — but never seed the tallies. Returns the
+    proposed assignments (date order) plus any blocks left unfilled for lack of an
+    eligible candidate.
+
+    ``mode`` decides how existing assignments *within the window* (``grid.dates``)
+    are treated — the proposal is deterministic either way, so this changes which
+    dates the engine is free to decide, not the chance of a different result:
+
+    * ``"complete"`` (default) — keep them: they seed the fairness tallies and are
+      treated as filled, so no block is proposed over them; only the gaps are
+      filled.
+    * ``"rebuild"`` — reopen them: in-window assignments neither seed the tallies
+      nor block their dates, so the whole window is re-proposed from scratch.
+
+    Existing assignments *outside* the window are fixed history in both modes and
+    always seed the fairness tallies (you cannot un-happen a past shift).
     """
+    if mode not in PROPOSAL_MODES:
+        raise ValueError(f"unknown mode {mode!r}; expected one of {PROPOSAL_MODES}")
+
     tallies = Tallies.empty(grid.people, settings, fte=fte)
+    window = set(grid.dates)
     filled: set[date] = set()
     for person, dates in (existing or {}).items():
         seeded = tuple(dates)
+        if mode == MODE_REBUILD:
+            # Reopen in-window assignments: seed only the out-of-window history so
+            # the engine re-decides (and re-tallies) every date inside the window.
+            seeded = tuple(d for d in seeded if d not in window)
         tallies.record_days(person, seeded)
         filled.update(seeded)
 
