@@ -9,12 +9,13 @@ not tested.
 from datetime import date
 
 from shift_proposer.cli import (
+    _settings_from_args,
     parse_args,
     propose_from_sheet,
     report_from_sheet,
     select_window,
 )
-from shift_proposer.config import Settings
+from shift_proposer.config import MODE_COMPLETE, MODE_REBUILD, Settings
 from shift_proposer.models import AvailabilityGrid, Person
 
 ANN = Person("Ann")
@@ -253,3 +254,13 @@ def test_parse_args_reads_out_tab_and_dry_run():
     args = parse_args(["--out-tab", "SupSci Shift Proposal", "--dry-run"])
     assert args.out_tab == "SupSci Shift Proposal"
     assert args.dry_run is True
+
+
+def test_mode_defaults_to_complete_and_threads_into_settings():
+    # No flag -> Settings keeps its "complete" default.
+    assert parse_args([]).mode is None
+    assert _settings_from_args(parse_args([])).mode == MODE_COMPLETE
+    # --mode rebuild overrides it.
+    args = parse_args(["--mode", "rebuild"])
+    assert args.mode == "rebuild"
+    assert _settings_from_args(args).mode == MODE_REBUILD
