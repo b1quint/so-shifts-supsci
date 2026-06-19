@@ -41,6 +41,15 @@ class Settings:
     # --- availability policy ----------------------------------------------
     available_codes: frozenset[Code] = field(default_factory=lambda: AVAILABLE_CODES)
 
+    # --- hours accounting (utilization report only; does not affect picks) -
+    # A single shift-day is this many hours. The tool standardises on 12 h/shift
+    # throughout; kept configurable so a different figure is a one-line change.
+    hours_per_shift: float = 12.0
+    # Full-time working hours per week, the denominator for "fraction of working
+    # hours spent on shifts" (matches the sheet's `Used Fraction of Time`, which
+    # divides by weeks × 40 h regardless of a person's FTE).
+    fulltime_hours_per_week: float = 40.0
+
     # --- scoring weights ---------------------------------------------------
     w_total: float = 1.0  # below fair-share of total shifts (YTD)
     w_weekend: float = 1.0  # below fair-share of weekends (YTD + quarter)

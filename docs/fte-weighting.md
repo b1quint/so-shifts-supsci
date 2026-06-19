@@ -15,9 +15,9 @@ weights the formula reduces exactly to the old equal split.
   when unset, fair share falls back to the equal split. Layout is configurable in `fte.FteLayout`.
 - **Relative-only.** Fair share depends only on the *ratio* of targets, so the
   shift-hours-vs-FTE-hours conversion (a global constant) does not affect who is picked — it would
-  only matter for an absolute expected-shift-count figure. *Note:* the `Stats - SupSci` tab notes
-  10 h/shift while a separate rule of thumb is 12 h/shift; reconcile only if absolute targets are
-  ever added.
+  only matter for an absolute expected-shift-count figure. The tool standardises on **12 h/shift**
+  (`Settings.hours_per_shift`); this constant is only consulted for absolute figures such as the
+  [shift-utilization report](status.md).
 - **Currently inert:** every person's target is presently 50%, so the FTE-weighted proposal is
   byte-identical to the equal split (verified). It diverges as soon as targets differ.
 

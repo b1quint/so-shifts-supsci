@@ -16,6 +16,16 @@ All three follow-ups from the original plan are implemented and run live:
 **Short shifts** (covering leftover runs shorter than a full block) are also implemented — see
 [Algorithm](algorithm.md#blocks-and-short-shifts).
 
+**Shift-utilization report** (`--report`) — a read-only summary of the shifts *already* on the sheet:
+per person, total shift-days, weekend shift-days, and the fraction of full-time working hours spent
+on shifts (**12 h/shift** over a `weeks × 40 h` full-time denominator, where weeks count every
+calendar day in the range inclusively — `(end − start + 1) / 7`, no rounding). This is one day more
+than the `Stats - SupSci` tab's `end − start` span, so the fraction sits a touch below the tab's
+`Used Fraction of Time` by design — we count every day worked). Rows follow spreadsheet order by default;
+`--sort fte` ranks by target FTE (with `--fte-tab`, which also adds an FTE column). Pure engine
+(`engine/report.py`) + renderer (`output/report.py`); never writes. See the README's
+[Reporting existing shifts](../README.md#reporting-existing-shifts).
+
 Repo: [shift_calendar_proposal_generator](https://github.com/b1quint/shift_calendar_proposal_generator)
 (branch `mvp-v1`). Build progress is tracked in [HANDOFF.md](../HANDOFF.md).
 

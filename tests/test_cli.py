@@ -11,6 +11,7 @@ from datetime import date
 from shift_proposer.cli import (
     parse_args,
     propose_from_sheet,
+    report_from_sheet,
     select_window,
 )
 from shift_proposer.config import Settings
@@ -93,6 +94,37 @@ def test_propose_from_sheet_runs_end_to_end():
     assert proposal.assignments[0].person == ANN
     assert proposal.assignments[0].block.dates[0] == date(2026, 6, 1)
     assert proposal.unfilled == ()
+
+
+# A SupSci grid with shifts already filled in, for the report path. Jun 1-2 are
+# Mon/Tue; Ann holds all four days (one of which we leave for Bo to vary counts).
+REPORT_SHEET = [
+    ["", "", "", "", "", "", ""],  # row 1: month header
+    ["", "", "", "2026-06-05", "2026-06-06", "2026-06-07", "2026-06-08"],  # row 2: Fri Sat Sun Mon
+    ["", "", "", "", "", "", ""],  # row 3: weekday
+    ["", "", "", "", "", "", ""],  # row 4: avail count
+    ["", "", "", "", "", "", ""],  # row 5: shift summary
+    ["Ann", "AB", "avail", "", "", "", ""],  # row 6: Ann availability
+    ["", "", "shift", "S", "S", "S", ""],  # row 7: Ann shift: Fri, Sat, Sun
+    ["Bo", "BC", "avail", "", "", "", ""],  # row 8: Bo availability
+    ["", "", "shift", "", "", "", "S"],  # row 9: Bo shift: Mon
+    ["", "", "", "", "", "", ""],  # row 10: blank name -> end
+]
+
+
+def test_report_from_sheet_counts_shifts_and_weekends():
+    settings = Settings(sheet_id="SHEET123")
+    rows, start, end = report_from_sheet(settings, client=FakeClient(REPORT_SHEET))
+    # Window defaults to the full sheet range.
+    assert (start, end) == (date(2026, 6, 5), date(2026, 6, 8))
+    by_name = {r.person: r for r in rows}
+    # Ann: 3 shift-days (Fri/Sat/Sun), 2 of them weekend; 3 × 12 h = 36 h.
+    assert (by_name["Ann"].shift_days, by_name["Ann"].weekend_days) == (3, 2)
+    assert by_name["Ann"].shift_hours == 36.0
+    # Bo: just Monday -> 1 shift-day, 0 weekend.
+    assert (by_name["Bo"].shift_days, by_name["Bo"].weekend_days) == (1, 0)
+    # Default ordering preserves the spreadsheet (row) order.
+    assert [r.person for r in rows] == ["Ann", "Bo"]
 
 
 # --- FTE-weighted fair share (end-to-end through the FTE tab) ---------------

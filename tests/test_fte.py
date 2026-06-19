@@ -73,7 +73,7 @@ def test_parse_grid_default_layout_matches_stats_supsci_tab():
         blank,  # row 2
         ["Name", "Initials", "", "", "", "", "", "Used", "Target Fraction of Time"],  # row 3
         blank,  # row 4
-        ["", "", "", "10 hours / shift"] + [""] * 5,  # row 5: unit note
+        ["", "", "", "12 hours / shift"] + [""] * 5,  # row 5: unit note
         ["Ann", "AN", "", "", "", "", "", "0.33", "0.5"],  # row 6 (unformatted 0.5)
         ["Bo", "BO", "", "", "", "", "", "0.21", "1"],  # row 7 (full-time)
         [""] * 9,  # row 8: blank -> roster ends here
