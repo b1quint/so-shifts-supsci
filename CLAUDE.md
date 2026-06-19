@@ -143,6 +143,17 @@ All policy lives in `Settings` (config.py), not scattered in code:
 | Review-first output, never live rows | `output_target = "proposed_column"` |
 | Proposal written to a SupSci-shaped duplicate tab | `proposal_tab_name`, `proposal_token = "S"` |
 | No-shift dates skipped via the `Requires support?` row | `LayoutConfig.support_label` |
+| Proposal mode: `complete` fills gaps / `rebuild` reopens the window | `mode = "complete"` |
+
+**Proposal mode (`Settings.mode`, CLI `--mode`).** Controls how existing shifts *inside the
+window* are treated; the proposal is deterministic either way, so this changes *which dates the
+engine may decide*, not the odds of a different result (there is only ever one result per input —
+no `recalculate` mode). `complete` (default) keeps in-window shifts (they seed fair-share and are
+treated as filled — only the gaps are proposed); `rebuild` reopens them (they neither seed nor
+block, so the whole window is re-proposed from scratch). Existing shifts *outside* the window are
+fixed history in both modes and always seed fair share. The split is by membership in `grid.dates`,
+handled in `engine/greedy.propose`. Caveat: the empty-cells-only writeback can't overwrite
+reopened dates, so `--mode rebuild` with `--out-tab` warns to clear that tab's window first.
 
 **Goal of the scoring:** minimize the spread (variance) of per-person load across scientists.
 
