@@ -147,6 +147,8 @@ SHIFT_SHEET_ID=<your-spreadsheet-id> \
 | `--fte-tab NAME` | none | Tab of per-person target FTE %; enables FTE-weighted fair share. |
 | `--out-tab NAME` | none | SupSci-shaped duplicate tab to write the proposed calendar into (fills empty shift cells). |
 | `--dry-run` | off | With `--out-tab`, report how many cells *would* be written without writing. |
+| `--report` | off | Report the shifts **already** on the sheet per person instead of proposing — read-only. See [Reporting existing shifts](#reporting-existing-shifts). |
+| `--report-csv PATH` | none | With `--report`, also write the report to this CSV. |
 
 If you omit the window, the whole calendar in the sheet is considered.
 
@@ -164,6 +166,45 @@ Proposed shift calendar — 12 assigned, 1 unfilled
 …and a `proposal.csv` with one row per block: status, dates, the proposed person,
 the total score, and each score term in its own column — so you can sort, filter,
 and double-check the reasoning in a spreadsheet.
+
+---
+
+## Reporting existing shifts
+
+For debugging or a sanity check, `--report` summarises the shifts **already** on
+the sheet rather than proposing new ones. It is **read-only** — it never writes a
+CSV (unless you ask), never touches the proposal tab, and never the live rows.
+
+```bash
+SHIFT_SHEET_ID=<your-spreadsheet-id> uv run shift-proposer --report
+```
+
+For each person it reports, within the window (defaults to the whole sheet):
+
+- **Shifts** — total assigned shift-days
+- **Weekend** — how many of those fall on a Saturday or Sunday
+- **Shift h** — shift-days × **12 h/shift**
+- **Frac** — shift hours as a fraction of full-time working hours
+  (`weeks × 40 h`), i.e. how much of a full-time schedule was spent on shifts
+
+```
+Shift utilization — 2026-07-01 → 2026-09-30
+Person   Shifts  Weekend   Shift h     Frac
+-------------------------------------------
+Ann          12        4       144    34.6%
+Bo            9        2       108    26.0%
+Cai           7        3        84    20.2%
+-------------------------------------------
+TOTAL        28        9       336    80.8%
+```
+
+Restrict the period with `--window-start` / `--window-end`, and add `--report-csv
+shifts.csv` to also save it. The denominator is full-time (40 h/week) for everyone
+regardless of target FTE — it matches the `Used Fraction of Time` the
+`Stats - SupSci` tab computes (that tab uses **10 h/shift**, though; this report
+uses the **12 h/shift** figure, configurable via `hours_per_shift` in
+[config.py](shift_proposer/config.py)). People marked `Out` are not included, since
+the reader excludes them from the roster.
 
 ---
 
