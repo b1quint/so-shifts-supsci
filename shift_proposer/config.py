@@ -21,6 +21,13 @@ from shift_proposer.models import Code
 # hard block. Kept module-level so it can serve as a frozen default.
 AVAILABLE_CODES: frozenset[Code] = frozenset({Code.A, Code.AS, Code.AR, Code.DASH})
 
+# How a run treats the shifts already on the sheet within the proposal window.
+# The proposal is deterministic — same inputs, same result — so these are not
+# "re-roll" options; they change *which dates the engine is free to decide*.
+MODE_COMPLETE = "complete"  # keep existing in-window shifts, only fill the gaps (default)
+MODE_REBUILD = "rebuild"  # reopen the whole window and re-propose every date from scratch
+PROPOSAL_MODES = (MODE_COMPLETE, MODE_REBUILD)
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -65,6 +72,9 @@ class Settings:
     # --- run window --------------------------------------------------------
     window_start: date | None = None
     window_end: date | None = None
+    # How to treat existing in-window shifts: "complete" fills only the gaps
+    # (default); "rebuild" reopens the whole window and re-proposes every date.
+    mode: str = MODE_COMPLETE
 
     # --- data source (identifiers loaded from env, never committed) --------
     sheet_id: str | None = None

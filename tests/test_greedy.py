@@ -10,7 +10,9 @@ is deterministic.
 from dataclasses import replace
 from datetime import date, timedelta
 
-from shift_proposer.config import Settings
+import pytest
+
+from shift_proposer.config import MODE_COMPLETE, MODE_REBUILD, Settings
 from shift_proposer.engine.greedy import propose
 from shift_proposer.models import AvailabilityGrid, Block, Code, Person
 
@@ -130,3 +132,46 @@ def test_run_is_deterministic():
     first = propose(grid, SETTINGS)
     second = propose(grid, SETTINGS)
     assert first == second
+
+
+def test_complete_is_the_default_mode():
+    # The default keeps existing in-window shifts (only the gap is filled).
+    window = days(MON, 8)
+    existing = {ANN: window[0:4]}
+    default = propose(make_grid(window), SETTINGS, existing=existing)
+    explicit = propose(make_grid(window), SETTINGS, existing=existing, mode=MODE_COMPLETE)
+    assert default == explicit
+    # Only the open second block is proposed; the first stays Ann's.
+    assert [a.block.dates for a in default.assignments] == [tuple(window[4:8])]
+
+
+def test_rebuild_reopens_in_window_existing_assignments():
+    # Ann holds the first block. In rebuild, that block is reopened and re-proposed
+    # alongside the second, so two assignments come back (vs one in complete mode).
+    window = days(MON, 8)
+    existing = {ANN: window[0:4]}
+    proposal = propose(make_grid(window), SETTINGS, existing=existing, mode=MODE_REBUILD)
+    assert [a.block.dates for a in proposal.assignments] == [
+        tuple(window[0:4]),
+        tuple(window[4:8]),
+    ]
+    # With everyone reset to zero load, the all-tied first block goes to Ann
+    # (lowest name); the rest rule then forces Bo onto the second.
+    assert [a.person for a in proposal.assignments] == [ANN, BO]
+
+
+def test_rebuild_keeps_out_of_window_history_as_fairness_seed():
+    # Bo and Cai each carry an old (out-of-window) block; Ann carries none. Even
+    # under rebuild, that history still seeds fair share, so the under-loaded Ann
+    # wins the (single) in-window block. Zero spacing so load alone decides.
+    window = days(MON, 4)
+    far_past = days(MON - timedelta(days=90), 4)
+    settings = replace(SETTINGS, w_spacing=0.0)
+    existing = {BO: far_past, CAI: far_past}
+    proposal = propose(make_grid(window), settings, existing=existing, mode=MODE_REBUILD)
+    assert proposal.assignments[0].person == ANN
+
+
+def test_unknown_mode_is_rejected():
+    with pytest.raises(ValueError, match="unknown mode"):
+        propose(make_grid(days(MON, 4)), SETTINGS, mode="recalculate")

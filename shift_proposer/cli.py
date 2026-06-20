@@ -18,7 +18,7 @@ from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
-from shift_proposer.config import Settings
+from shift_proposer.config import MODE_REBUILD, PROPOSAL_MODES, Settings
 from shift_proposer.engine.greedy import propose
 from shift_proposer.engine.report import (
     SORT_FTE,
@@ -108,7 +108,14 @@ def propose_from_sheet(settings: Settings, *, client=None) -> Proposal:
             f"({min(no_shift).isoformat()} … {max(no_shift).isoformat()})",
             file=sys.stderr,
         )
-    return propose(grid, settings, existing=parsed.existing, fte=fte, no_shift=parsed.no_shift)
+    return propose(
+        grid,
+        settings,
+        existing=parsed.existing,
+        fte=fte,
+        no_shift=parsed.no_shift,
+        mode=settings.mode,
+    )
 
 
 def _sheet_window(
@@ -213,6 +220,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="with --out-tab, show how many cells would be written without writing",
     )
     parser.add_argument(
+        "--mode",
+        choices=PROPOSAL_MODES,
+        default=None,
+        help="how to treat existing shifts in the window: 'complete' (default) "
+        "fills only the empty dates; 'rebuild' reopens the whole window and "
+        "re-proposes every date from scratch",
+    )
+    parser.add_argument(
         "--window-start",
         type=date.fromisoformat,
         help="earliest date to propose (YYYY-MM-DD)",
@@ -235,6 +250,8 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         overrides["fte_tab_name"] = args.fte_tab
     if args.out_tab:
         overrides["proposal_tab_name"] = args.out_tab
+    if args.mode:
+        overrides["mode"] = args.mode
     if args.window_start:
         overrides["window_start"] = args.window_start
     if args.window_end:
@@ -278,6 +295,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if settings.proposal_tab_name:
+        if settings.mode == MODE_REBUILD:
+            print(
+                "warning: --mode rebuild re-proposes dates that may already be "
+                f"filled in tab {settings.proposal_tab_name!r}; writeback only fills "
+                "empty cells, so clear that tab's window before relying on it.",
+                file=sys.stderr,
+            )
         try:
             updates = write_proposal_calendar(settings, proposal, dry_run=args.dry_run)
         except ValueError as exc:
