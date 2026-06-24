@@ -295,7 +295,18 @@ def parse_grid(
         if status == "skip":
             continue
         if status == "inactive":
-            inactive.append(Person(name=_cell(rows, r, layout.name_col)))
+            person = Person(name=_cell(rows, r, layout.name_col))
+            inactive.append(person)
+            # Their dates still block scheduling (they're covering those nights),
+            # even though they don't count toward fair-share or eligibility.
+            shift_row = r + 1
+            covered = [
+                day
+                for offset, day in enumerate(dates)
+                if _is_assigned(_cell(rows, shift_row, layout.first_date_col + offset))
+            ]
+            if covered:
+                existing[person] = covered
             continue
         person = Person(name=_cell(rows, r, layout.name_col))
         people.append(person)

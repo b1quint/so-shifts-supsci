@@ -297,9 +297,10 @@ def main(argv: list[str] | None = None) -> int:
     if settings.proposal_tab_name:
         if settings.mode == MODE_REBUILD:
             print(
-                "warning: --mode rebuild re-proposes dates that may already be "
-                f"filled in tab {settings.proposal_tab_name!r}; writeback only fills "
-                "empty cells, so clear that tab's window before relying on it.",
+                "warning: --mode rebuild re-proposes dates that may already hold "
+                f"real shift assignments in tab {settings.proposal_tab_name!r}; "
+                "those cells will not be overwritten — clear the window first if "
+                "you want a clean rebuild in the proposal tab.",
                 file=sys.stderr,
             )
         try:

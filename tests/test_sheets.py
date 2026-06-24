@@ -189,15 +189,31 @@ def _proposal_for(person):
     return Proposal(assignments=(Assignment(person, _block(range(4)), rationale),))
 
 
-def test_plan_proposal_calendar_fills_only_empty_shift_cells():
+def test_plan_proposal_calendar_overwrites_existing_proposal_token():
+    # A cell that already holds the proposal token (from a previous run) must be
+    # overwritten so re-running the tool doesn't silently write 0 cells.
     settings = Settings(sheet_id="S", proposal_tab_name="Prop")
     updates = plan_proposal_calendar(PROP_TAB, _proposal_for(Person("Ann")), settings)
-    # Ann's shift row is index 6; day-1 col 3 is already filled -> skipped.
+    # Ann's shift row is index 6; day-1 col 3 has "S" (proposal token) -> overwritten.
     assert [(u.row, u.col, u.value) for u in updates] == [
+        (6, 3, "S"),
         (6, 4, "S"),
         (6, 5, "S"),
         (6, 6, "S"),
     ]
+
+
+def test_plan_proposal_calendar_does_not_overwrite_real_shift_assignments():
+    # A cell with a real shift token (anything other than the proposal token) must
+    # not be overwritten — only the proposal itself writes into the proposal tab.
+    prop_tab_with_real_shift = [row[:] for row in PROP_TAB]
+    prop_tab_with_real_shift[6] = ["", "", "Shift", "BS", "", "", ""]  # real person
+    settings = Settings(sheet_id="S", proposal_tab_name="Prop")
+    updates = plan_proposal_calendar(
+        prop_tab_with_real_shift, _proposal_for(Person("Ann")), settings
+    )
+    # col 3 has "BS" (not the proposal token) -> skipped.
+    assert [(u.row, u.col) for u in updates] == [(6, 4), (6, 5), (6, 6)]
 
 
 def test_write_proposal_calendar_applies_cells_through_gspread():

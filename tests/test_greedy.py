@@ -175,3 +175,36 @@ def test_rebuild_keeps_out_of_window_history_as_fairness_seed():
 def test_unknown_mode_is_rejected():
     with pytest.raises(ValueError, match="unknown mode"):
         propose(make_grid(days(MON, 4)), SETTINGS, mode="recalculate")
+
+
+def test_out_person_covered_dates_are_treated_as_filled():
+    # An "Out" person (not in grid.people) may appear in `existing` because the
+    # parser now records their covered dates.  The engine must add those dates to
+    # `filled` so it never proposes a rotation member on top of an Out-covered night.
+    window = days(MON, 8)
+    out_person = Person("Out-Brian")
+    # Out-Brian covers the first block; he is NOT in grid.people.
+    existing = {out_person: window[0:4]}
+    proposal = propose(make_grid(window), SETTINGS, existing=existing)
+    # Only the second block is open; the first is blocked by Out-Brian.
+    assert len(proposal.assignments) == 1
+    assert proposal.assignments[0].block.dates == tuple(window[4:8])
+    # Out-Brian is not in the candidate pool, so the pick is the lowest-named
+    # active person.
+    assert proposal.assignments[0].person == ANN
+
+
+def test_out_person_covered_dates_do_not_seed_fairness_tallies():
+    # Out-Brian's covered dates block scheduling (above) but must NOT count toward
+    # the active people's fair-share targets, because Out-people are excluded from
+    # the average.  Verify by checking that the all-tied pick still goes to ANN
+    # (lowest name) despite Out-Brian covering some nights.
+    window = days(MON, 4)
+    out_person = Person("Zara-Out")  # alphabetically last, not in grid.people
+    far_past = days(MON - timedelta(days=90), 20)
+    existing = {out_person: far_past}  # lots of out-of-window coverage
+    proposal = propose(make_grid(window), SETTINGS, existing=existing)
+    # If Out-Zara's nights inflated the "total shifts" used for fair-share, the
+    # deficit calculation would be wrong.  With equal active tallies the pick must
+    # still be ANN (name tie-break), not be distorted by the extra coverage.
+    assert proposal.assignments[0].person == ANN

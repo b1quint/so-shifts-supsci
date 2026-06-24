@@ -110,10 +110,16 @@ def plan_proposal_calendar(
     """
     idx = index_grid(rows)
 
+    proposal_token = settings.proposal_token
+
     def is_empty(r: int, c: int) -> bool:
         if r >= len(rows) or c >= len(rows[r]):
             return True
-        return rows[r][c].strip() == ""
+        cell = rows[r][c].strip()
+        # Treat a cell already holding the proposal token as overwriteable so
+        # re-running the tool doesn't silently write 0 cells.  Cells with any
+        # other value (real shift assignments) are left untouched.
+        return cell == "" or cell == proposal_token
 
     return plan_calendar_fill(
         proposal,

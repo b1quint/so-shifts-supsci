@@ -90,6 +90,27 @@ def test_existing_assignments_come_from_the_shift_row():
     assert parsed.existing == {ANN: [D2], BO: [D1]}  # "-" / blank are not assignments
 
 
+def test_merged_shift_cell_only_detected_on_first_day():
+    # When a shift row has a merged cell spanning multiple columns, gspread's
+    # get_all_values returns the value only in the leftmost column and "" for the
+    # others.  The parser currently detects only that first day as assigned.
+    # This test documents the known limitation so changes in behaviour are noticed.
+    grid = [
+        ["", "", "", "2026-06-01", "2026-06-02", "2026-06-03"],
+        ["", "", "", "", "", ""],
+        ["", "", "", "", "", ""],
+        ["", "", "", "", "", ""],
+        ["", "", "", "", "", ""],
+        ["Ann", "AB", "Avail", "A", "A", "A"],
+        ["", "", "Shift", "S", "", ""],  # merged across D2-D3 -> only D1 seen
+    ]
+    parsed = parse_grid(grid, layout=LayoutConfig(date_row=0))
+    # Only D1 is detected; D2 and D3 look empty due to the merge.
+    # If you see "shifts with 8 days" but the engine re-proposes days 2-N,
+    # un-merge the shift-row cells and repeat the token in each column.
+    assert parsed.existing == {ANN: [D1]}
+
+
 def test_explicit_dates_override_the_date_row():
     # Caller supplies resolved dates; the date row is then irrelevant.
     explicit = [date(2030, 1, 1), date(2030, 1, 2), date(2030, 1, 3)]
@@ -183,7 +204,9 @@ def test_sentinel_rows_without_avail_label_are_not_people():
 
 def test_out_label_excludes_a_person_from_the_rotation():
     # A real, named person marked "Out": kept in the sheet but not scheduled,
-    # not counted, and reported in `inactive`. Their shift row must not fill dates.
+    # not counted, and reported in `inactive`. Their COVERED dates must still
+    # appear in `existing` so the engine treats those nights as filled and does
+    # not double-book a rotation member on top of them.
     grid = [
         ["", "", "", "2026-06-01", "2026-06-02", "2026-06-03"],  # row 0: dates
         ["", "", "", "", "", ""],
@@ -193,9 +216,12 @@ def test_out_label_excludes_a_person_from_the_rotation():
         ["Ann", "AB", "Avail", "A", "A", "A"],  # active rotation member
         ["", "", "Shift", "", "", ""],
         ["Brian", "BS", "Out", "A", "A", "A"],  # covers shifts, not in rotation
-        ["", "", "Shift", "BS", "BS", "BS"],  # his coverage must NOT count as filled
+        ["", "", "Shift", "BS", "BS", "BS"],  # his covered dates must block scheduling
     ]
     parsed = parse_grid(grid, layout=LayoutConfig(date_row=0))
     assert parsed.grid.people == (ANN,)
     assert parsed.inactive == (Person("Brian"),)
-    assert parsed.existing == {}  # Brian's shift row does not fill any date
+    # Brian is not a rotation member, so he is not in grid.people and never
+    # proposed.  But his covered dates ARE in existing so the greedy engine
+    # adds them to `filled` and won't schedule anyone else on those nights.
+    assert parsed.existing == {Person("Brian"): [D1, D2, D3]}
