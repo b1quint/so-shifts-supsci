@@ -28,6 +28,7 @@ from shift_proposer.engine.report import (
     build_report,
 )
 from shift_proposer.io.sheets import (
+    apply_live_calendar,
     clear_proposal_calendar,
     load_fte,
     load_sheet,
@@ -231,6 +232,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "use before --mode rebuild to give the proposal tab a clean slate",
     )
     parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="after proposing, write the result directly into the live SupSci tab "
+        "(only empty cells; existing assignments are never overwritten); "
+        "use --dry-run to preview first",
+    )
+    parser.add_argument(
         "--mode",
         choices=PROPOSAL_MODES,
         default=None,
@@ -343,6 +351,18 @@ def main(argv: list[str] | None = None) -> int:
         verb = "Would write" if args.dry_run else "Wrote"
         print(
             f"{verb} {len(updates)} cell(s) into tab {settings.proposal_tab_name!r}.",
+            file=sys.stderr,
+        )
+
+    if args.apply:
+        try:
+            live_updates = apply_live_calendar(settings, proposal, dry_run=args.dry_run)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        verb = "Would write" if args.dry_run else "Wrote"
+        print(
+            f"{verb} {len(live_updates)} cell(s) into live tab {settings.tab_name!r}.",
             file=sys.stderr,
         )
 

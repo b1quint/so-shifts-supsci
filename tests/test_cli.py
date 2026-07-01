@@ -264,3 +264,8 @@ def test_mode_defaults_to_complete_and_threads_into_settings():
     args = parse_args(["--mode", "rebuild"])
     assert args.mode == "rebuild"
     assert _settings_from_args(args).mode == MODE_REBUILD
+
+
+def test_parse_args_apply_defaults_false():
+    assert parse_args([]).apply is False
+    assert parse_args(["--apply"]).apply is True

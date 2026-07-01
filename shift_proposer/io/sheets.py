@@ -26,7 +26,11 @@ from shift_proposer.config import Settings
 from shift_proposer.io.fte import parse_fte_grid
 from shift_proposer.io.parser import ParsedSheet, index_grid, parse_grid
 from shift_proposer.models import Person, Proposal
-from shift_proposer.output.writeback import CellUpdate, plan_calendar_clear, plan_calendar_fill
+from shift_proposer.output.writeback import (
+    CellUpdate,
+    plan_calendar_clear,
+    plan_calendar_fill,
+)
 
 
 class _Worksheet(Protocol):
@@ -128,6 +132,47 @@ def plan_proposal_calendar(
         is_empty=is_empty,
         token=settings.proposal_token,
     )
+
+
+def apply_live_calendar(
+    settings: Settings,
+    proposal: Proposal,
+    *,
+    client: gspread.Client | None = None,
+    dry_run: bool = False,
+) -> list[CellUpdate]:
+    """Write ``proposal`` directly into the live SupSci tab; return the updates.
+
+    Unlike :func:`write_proposal_calendar`, this targets ``settings.tab_name``
+    (the live sheet). Only **strictly empty** shift cells are filled — real
+    existing assignments are never overwritten (no proposal-token special case).
+    The live-tab protection is omitted here because ``--apply`` at the CLI is
+    the explicit opt-in guard. With ``dry_run`` nothing is written.
+    """
+    if not settings.sheet_id:
+        raise ValueError("settings.sheet_id is required (set SHIFT_SHEET_ID).")
+
+    client = client or authorize(settings)
+    worksheet = open_worksheet(client, settings, settings.tab_name)
+    rows = fetch_grid(worksheet)
+    idx = index_grid(rows)
+
+    def is_empty(r: int, c: int) -> bool:
+        if r >= len(rows) or c >= len(rows[r]):
+            return True
+        return rows[r][c].strip() == ""
+
+    updates = plan_calendar_fill(
+        proposal,
+        shift_row_by_name=idx.shift_row_by_name,
+        col_by_date=idx.col_by_date,
+        is_empty=is_empty,
+        token=settings.proposal_token,
+    )
+    if updates and not dry_run:
+        cells = [gspread.Cell(row=u.row + 1, col=u.col + 1, value=u.value) for u in updates]
+        worksheet.update_cells(cells)
+    return updates
 
 
 def clear_proposal_calendar(
