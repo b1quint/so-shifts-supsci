@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from shift_proposer.models import Assignment, Block, Person, Proposal, Rationale
 from shift_proposer.output.writeback import (
     CellUpdate,
+    plan_calendar_clear,
     plan_calendar_fill,
     to_csv_rows,
     write_csv,
@@ -143,5 +144,50 @@ def test_plan_writes_nothing_for_unfilled_blocks():
         shift_row_by_name=SHIFT_ROW,
         col_by_date=COL_BY_DATE,
         is_empty=lambda r, c: True,
+    )
+    assert updates == []
+
+
+# --- calendar clear planner (pure) ------------------------------------------
+
+# Grid stub: Ann's shift row (10) has values in cols 5 and 6; Bo's row (12) is empty.
+def _make_rows(ann_vals: dict[int, str]) -> list[list[str]]:
+    """Return a minimal fake grid with 13 rows and 10 columns."""
+    rows: list[list[str]] = [[""] * 10 for _ in range(13)]
+    for col, val in ann_vals.items():
+        rows[10][col] = val
+    return rows
+
+
+def test_clear_returns_empty_update_for_occupied_cell():
+    rows = _make_rows({5: "S", 6: "S"})
+    updates = plan_calendar_clear(
+        shift_row_by_name=SHIFT_ROW,
+        col_by_date={MON: 5, MON + timedelta(days=1): 6},
+        rows=rows,
+    )
+    assert updates == [
+        CellUpdate(row=10, col=5, value=""),
+        CellUpdate(row=10, col=6, value=""),
+    ]
+
+
+def test_clear_skips_already_empty_cells():
+    rows = _make_rows({5: "S"})  # col 6 is empty
+    updates = plan_calendar_clear(
+        shift_row_by_name=SHIFT_ROW,
+        col_by_date={MON: 5, MON + timedelta(days=1): 6},
+        rows=rows,
+    )
+    assert len(updates) == 1
+    assert updates[0] == CellUpdate(row=10, col=5, value="")
+
+
+def test_clear_returns_nothing_when_all_cells_empty():
+    rows = _make_rows({})
+    updates = plan_calendar_clear(
+        shift_row_by_name=SHIFT_ROW,
+        col_by_date=COL_BY_DATE,
+        rows=rows,
     )
     assert updates == []

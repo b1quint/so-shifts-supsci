@@ -35,6 +35,25 @@ class CellUpdate:
     value: str
 
 
+def plan_calendar_clear(
+    *,
+    shift_row_by_name: Mapping[str, int],
+    col_by_date: Mapping[date, int],
+    rows: Sequence[Sequence[str]],
+) -> list[CellUpdate]:
+    """Plan clearing every non-empty shift cell in the mapped window.
+
+    Returns a :class:`CellUpdate` with ``value=""`` for each occupied shift
+    cell, leaving availability rows untouched. The caller applies the batch.
+    """
+    updates: list[CellUpdate] = []
+    for row in shift_row_by_name.values():
+        for col in col_by_date.values():
+            if row < len(rows) and col < len(rows[row]) and rows[row][col].strip():
+                updates.append(CellUpdate(row=row, col=col, value=""))
+    return updates
+
+
 def plan_calendar_fill(
     proposal: Proposal,
     *,
