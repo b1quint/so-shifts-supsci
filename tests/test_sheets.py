@@ -14,6 +14,7 @@ from gspread.utils import ValueRenderOption
 
 from shift_proposer.config import Settings
 from shift_proposer.io.sheets import (
+    apply_live_calendar,
     fetch_grid,
     load_fte,
     open_worksheet,
@@ -245,3 +246,60 @@ def test_write_proposal_calendar_refuses_to_write_the_live_tab():
     settings = Settings(sheet_id="S", tab_name="SupSci", proposal_tab_name="SupSci")
     with pytest.raises(ValueError, match="refusing to write into the live tab"):
         write_proposal_calendar(settings, _proposal_for(Person("Bo")), client=FakeClient(None))
+
+
+# --- apply_live_calendar ---------------------------------------------------
+
+
+# Same shape as PROP_TAB but represents the live SupSci tab.  Ann's shift row
+# (index 6) already has "S" on day 1; Bo's row is clean.
+LIVE_TAB = [
+    ["", "", "", "", "", "", ""],
+    ["", "", "", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04"],
+    ["", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", ""],
+    ["Ann", "AN", "Avail", "", "", "", ""],
+    ["", "", "Shift", "S", "", "", ""],  # day 1 already assigned
+    ["Bo", "BO", "Avail", "", "", "", ""],
+    ["", "", "Shift", "", "", "", ""],
+]
+
+
+def test_apply_live_calendar_writes_to_live_tab():
+    ws = WritableFakeWorksheet(LIVE_TAB)
+    client = FakeClient(FakeMultiTabSpreadsheet({"SupSci": ws}))
+    settings = Settings(sheet_id="S", tab_name="SupSci")
+
+    updates = apply_live_calendar(settings, _proposal_for(Person("Bo")), client=client)
+
+    # Bo's shift row (index 8) is fully empty -> four writes, 1-indexed.
+    assert ws.written == [(9, 4, "S"), (9, 5, "S"), (9, 6, "S"), (9, 7, "S")]
+    assert len(updates) == 4
+
+
+def test_apply_live_calendar_skips_non_empty_cells_strictly():
+    # Ann already has a real assignment on day 1 (col 3 holds "S").
+    # Unlike the proposal-tab writer, apply_live does NOT treat the token as
+    # overwriteable — existing assignments must be left alone.
+    ws = WritableFakeWorksheet(LIVE_TAB)
+    client = FakeClient(FakeMultiTabSpreadsheet({"SupSci": ws}))
+    settings = Settings(sheet_id="S", tab_name="SupSci")
+
+    updates = apply_live_calendar(settings, _proposal_for(Person("Ann")), client=client)
+
+    # Day 1 col 3 has "S" -> skipped; only days 2-4 are written.
+    assert [(u.row, u.col) for u in updates] == [(6, 4), (6, 5), (6, 6)]
+
+
+def test_apply_live_calendar_dry_run_writes_nothing():
+    ws = WritableFakeWorksheet(LIVE_TAB)
+    client = FakeClient(FakeMultiTabSpreadsheet({"SupSci": ws}))
+    settings = Settings(sheet_id="S", tab_name="SupSci")
+
+    updates = apply_live_calendar(
+        settings, _proposal_for(Person("Bo")), client=client, dry_run=True
+    )
+
+    assert ws.written is None
+    assert len(updates) == 4
