@@ -30,6 +30,7 @@ from shift_proposer.engine.tallies import Tallies
 from shift_proposer.models import (
     Assignment,
     AvailabilityGrid,
+    Code,
     Person,
     Proposal,
 )
@@ -94,8 +95,16 @@ def propose(
             unfilled.append(block)
             continue
 
+        # Prefer candidates with no "?" days — they are genuinely available.
+        # Only fall back to "?" candidates when no clean option exists.
+        clean = [
+            p for p in candidates
+            if not any(grid.code(p, d) is Code.QUESTION for d in block.dates)
+        ]
+        pool = clean if clean else candidates
+
         year = block.start.year
-        scored = [(person, *score(grid, tallies, settings, person, block)) for person in candidates]
+        scored = [(person, *score(grid, tallies, settings, person, block)) for person in pool]
         # Highest score wins; ties broken by lowest YTD load, then name.
         best_person, _, best_rationale = min(
             scored,

@@ -194,6 +194,29 @@ def test_out_person_covered_dates_are_treated_as_filled():
     assert proposal.assignments[0].person == ANN
 
 
+def test_question_person_loses_to_clean_candidate_regardless_of_load():
+    # Ann has "?" on all 4 days; Bo and Cai are fully clean. Even if Ann is far
+    # behind on fair share, a clean candidate must be preferred.
+    window = days(MON, 4)
+    far_past = days(MON - timedelta(days=90), 4)
+    # Load Bo and Cai with history; Ann has none — she is the most under-loaded.
+    existing = {BO: far_past, CAI: far_past}
+    codes = {(ANN, d): Code.QUESTION for d in window}
+    settings = replace(SETTINGS, w_spacing=0.0)
+    proposal = propose(make_grid(window, codes), settings, existing=existing)
+    # Despite Ann being furthest behind, Bo or Cai (clean) must win.
+    assert proposal.assignments[0].person in (BO, CAI)
+
+
+def test_question_person_is_picked_when_no_clean_candidate_exists():
+    # Everyone has "?" on every day — "?" must be used rather than leaving unfilled.
+    window = days(MON, 4)
+    codes = {(p, d): Code.QUESTION for p in PEOPLE for d in window}
+    proposal = propose(make_grid(window, codes), SETTINGS)
+    assert len(proposal.assignments) == 1
+    assert proposal.unfilled == ()
+
+
 def test_out_person_covered_dates_do_not_seed_fairness_tallies():
     # Out-Brian's covered dates block scheduling (above) but must NOT count toward
     # the active people's fair-share targets, because Out-people are excluded from

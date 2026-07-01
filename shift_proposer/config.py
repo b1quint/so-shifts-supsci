@@ -61,7 +61,7 @@ class Settings:
     w_total: float = 1.0  # below fair-share of total shifts (YTD)
     w_weekend: float = 1.0  # below fair-share of weekends (YTD + quarter)
     w_spacing: float = 0.1  # days since last shift (maximize rest)
-    w_question: float = 0.5  # penalty per "?" day in the block
+    w_question: float = 2.0  # penalty per "?" day in the block
 
     # --- locked v1 decision flags -----------------------------------------
     block_align: str = "float"  # blocks float freely, no weekday anchor

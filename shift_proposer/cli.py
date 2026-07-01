@@ -247,6 +247,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "re-proposes every date from scratch",
     )
     parser.add_argument(
+        "--w-question",
+        type=float,
+        default=None,
+        metavar="W",
+        help="penalty weight per '?' day in a block (default: 1.5); "
+        "higher values make the proposer avoid '?' days more aggressively",
+    )
+    parser.add_argument(
         "--window-start",
         type=date.fromisoformat,
         help="earliest date to propose (YYYY-MM-DD)",
@@ -275,6 +283,8 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         overrides["window_start"] = args.window_start
     if args.window_end:
         overrides["window_end"] = args.window_end
+    if args.w_question is not None:
+        overrides["w_question"] = args.w_question
     return Settings.from_env(**overrides)
 
 
