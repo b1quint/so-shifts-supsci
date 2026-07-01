@@ -27,7 +27,12 @@ from shift_proposer.engine.report import (
     ShiftReportRow,
     build_report,
 )
-from shift_proposer.io.sheets import load_fte, load_sheet, write_proposal_calendar
+from shift_proposer.io.sheets import (
+    clear_proposal_calendar,
+    load_fte,
+    load_sheet,
+    write_proposal_calendar,
+)
 from shift_proposer.models import AvailabilityGrid, Person, Proposal
 from shift_proposer.output.proposal import render_report
 from shift_proposer.output.report import render_report as render_shift_report
@@ -217,7 +222,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="with --out-tab, show how many cells would be written without writing",
+        help="with --out-tab, show how many cells would be written/cleared without writing",
+    )
+    parser.add_argument(
+        "--clear",
+        action="store_true",
+        help="clear all shift assignments in the window from --out-tab and exit; "
+        "use before --mode rebuild to give the proposal tab a clean slate",
     )
     parser.add_argument(
         "--mode",
@@ -273,12 +284,33 @@ def _run_report(settings: Settings, report_csv: Path | None, sort_by: str) -> in
     return 0
 
 
+def _run_clear(settings: Settings, dry_run: bool) -> int:
+    """Clear shift cells in the proposal tab's window; print a summary."""
+    if not settings.proposal_tab_name:
+        print("error: --clear requires --out-tab", file=sys.stderr)
+        return 2
+    try:
+        updates = clear_proposal_calendar(settings, dry_run=dry_run)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    verb = "Would clear" if dry_run else "Cleared"
+    print(
+        f"{verb} {len(updates)} shift cell(s) in tab {settings.proposal_tab_name!r}.",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     settings = _settings_from_args(args)
 
     if args.report:
         return _run_report(settings, args.report_csv, args.sort)
+
+    if args.clear:
+        return _run_clear(settings, args.dry_run)
 
     try:
         proposal = propose_from_sheet(settings)
@@ -299,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 "warning: --mode rebuild re-proposes dates that may already hold "
                 f"real shift assignments in tab {settings.proposal_tab_name!r}; "
-                "those cells will not be overwritten — clear the window first if "
+                "those cells will not be overwritten — run with --clear first if "
                 "you want a clean rebuild in the proposal tab.",
                 file=sys.stderr,
             )

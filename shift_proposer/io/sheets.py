@@ -26,7 +26,7 @@ from shift_proposer.config import Settings
 from shift_proposer.io.fte import parse_fte_grid
 from shift_proposer.io.parser import ParsedSheet, index_grid, parse_grid
 from shift_proposer.models import Person, Proposal
-from shift_proposer.output.writeback import CellUpdate, plan_calendar_fill
+from shift_proposer.output.writeback import CellUpdate, plan_calendar_clear, plan_calendar_fill
 
 
 class _Worksheet(Protocol):
@@ -128,6 +128,51 @@ def plan_proposal_calendar(
         is_empty=is_empty,
         token=settings.proposal_token,
     )
+
+
+def clear_proposal_calendar(
+    settings: Settings,
+    *,
+    client: gspread.Client | None = None,
+    dry_run: bool = False,
+) -> list[CellUpdate]:
+    """Clear all shift cells in the proposal tab's window; return the updates.
+
+    Reads the proposal tab, finds every non-empty cell in each person's shift
+    row within ``settings.window_start`` / ``settings.window_end`` (unbounded if
+    not set), and clears them in one batch. Refuses to touch the live SupSci tab.
+    With ``dry_run`` the planned clears are returned but nothing is written.
+    """
+    if not settings.sheet_id:
+        raise ValueError("settings.sheet_id is required (set SHIFT_SHEET_ID).")
+    if not settings.proposal_tab_name:
+        raise ValueError("settings.proposal_tab_name is required to clear the calendar.")
+    if settings.proposal_tab_name == settings.tab_name:
+        raise ValueError(
+            f"refusing to clear the live tab {settings.tab_name!r}; "
+            "proposal_tab_name must be a separate duplicate."
+        )
+
+    client = client or authorize(settings)
+    worksheet = open_worksheet(client, settings, settings.proposal_tab_name)
+    rows = fetch_grid(worksheet)
+
+    idx = index_grid(rows)
+    col_by_date = {
+        day: col
+        for day, col in idx.col_by_date.items()
+        if (settings.window_start is None or day >= settings.window_start)
+        and (settings.window_end is None or day <= settings.window_end)
+    }
+    updates = plan_calendar_clear(
+        shift_row_by_name=idx.shift_row_by_name,
+        col_by_date=col_by_date,
+        rows=rows,
+    )
+    if updates and not dry_run:
+        cells = [gspread.Cell(row=u.row + 1, col=u.col + 1, value=u.value) for u in updates]
+        worksheet.update_cells(cells)
+    return updates
 
 
 def write_proposal_calendar(
