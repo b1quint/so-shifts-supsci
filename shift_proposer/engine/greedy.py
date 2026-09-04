@@ -85,7 +85,10 @@ def propose(
     # No-shift dates break blocks like filled dates do, but are not assignments
     # (never seed the tallies) and are never flagged unfilled.
     excluded = filled | set(no_shift or ())
-    blocks = enumerate_blocks(grid.dates, excluded, settings.shift_len, settings.min_shift_len)
+    anchor_weekday = 0 if settings.block_align == "monday" else None  # 0 = Monday
+    blocks = enumerate_blocks(
+        grid.dates, excluded, settings.shift_len, settings.min_shift_len, anchor_weekday
+    )
 
     assignments: list[Assignment] = []
     unfilled = []

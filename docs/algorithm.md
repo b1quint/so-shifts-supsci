@@ -10,30 +10,34 @@ modules that implement this loop are described in [Architecture](architecture.md
 ## The loop (greedy + scoring)
 
 ```text
-for each unfilled 4-day block in the window, in date order:
-    candidates = people available on all 4 days (A/AS/AR/- ok; no 'X')
+for each unfilled 7-day block in the window, in date order (block always starts Monday):
+    candidates = people available on all 7 days (A/AS/AR/- ok; no 'X')
                  AND past their minimum rest (>= 2 rotations since last shift)
     for each candidate:
         score =  w_total    * (how far below fair-share of total shifts, YTD)
-               + w_weekend  * (how far below fair-share of weekends, YTD + current quarter*)
                + w_spacing  * (days since their last shift)          # maximize rest between shifts
                - w_question * (number of '?' days in this block)
+               - w_prep     * (number of unavailable days in the pre-shift prep window)
         # fair-share target is FTE-weighted: total * fte_person / sum(fte), not total / N
+        # prep window = the Wed/Thu/Fri immediately before the block's Monday start;
+        # not a hard blocker, just a soft nudge towards someone who can prepare
     if no candidate: leave the block unfilled and flag it for review
     else: assign the highest-scoring candidate (stable tie-break)
-    update running tallies (shift-days, weekend-days by calendar quarter, last-shift date)
-
-    # *current-quarter counters are seeded from the prior quarter (carry-over policy),
-    #  not reset to zero, so balance carries across quarter boundaries.
+    update running tallies (shift-days YTD, last-shift date)
 ```
 
-Weights `w_*` are tunable knobs. Weekend days (Sat/Sun) are counted per block and rolled into the
-per-person tallies that drive the next decision.
+Weights `w_*` are tunable knobs.
+
+With 7-day shifts every block spans exactly one weekend, so there is no separate
+weekend-fairness term (and no calendar-quarter horizon) any more — total-shift fair share already
+covers it. This also removes the old "two weekends in a row" concern entirely: it can't happen when
+each rotation is a full week.
 
 ## Blocks and short shifts
 
-Runs of consecutive unfilled days are chopped into `shift_len` (4-day) blocks, floating freely from
-each gap with no weekday anchor. No-shift dates (the `Requires support?` row) break the runs.
+Runs of consecutive unfilled days are chopped into `shift_len` (7-day) blocks, anchored to Monday: a
+run is split at its first Monday into a leading short block (if the run starts mid-week) plus
+Monday-Sunday full blocks from there on. No-shift dates (the `Requires support?` row) break the runs.
 
 A leftover run shorter than `shift_len` is **proposed as a short block** rather than dropped, so
 short gaps still get covered — down to `min_shift_len` (default `1` = cover a single night; set it
@@ -47,5 +51,5 @@ proposal.
 
 Because the output is a *proposal for review*, each assignment carries a `Rationale` — the per-term
 score breakdown that produced it. The reviewer can see *why* person P got block B (e.g. "furthest
-below weekend fair-share, longest rested"), which is the whole advantage of greedy + scoring over an
-opaque optimizer in v1.
+below fair-share, longest rested, fully prepped"), which is the whole advantage of greedy + scoring
+over an opaque optimizer in v1.

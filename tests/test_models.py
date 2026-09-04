@@ -54,12 +54,10 @@ def test_block_reports_start_end_and_weekend_days():
 
 def test_settings_defaults_match_locked_v1_decisions():
     s = Settings()
-    assert s.shift_len == 4
+    assert s.shift_len == 7
     assert s.min_rest_rotations == 2
     assert s.available_codes == AVAILABLE_CODES == {Code.A, Code.AS, Code.AR, Code.DASH}
-    assert s.block_align == "float"
-    assert s.quarter_mode == "calendar"
-    assert s.quarter_seed == "carry_deviation"
+    assert s.block_align == "monday"
     assert s.output_target == "proposed_column"
     assert s.tab_name == "SupSci"
 

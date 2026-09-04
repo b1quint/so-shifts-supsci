@@ -1,21 +1,15 @@
-"""Step-2 tests for engine/tallies — the two-horizon counters.
+"""Step-2 tests for engine/tallies — the YTD fair-share counters.
 
-All pure: hand-built people + dates, no Sheets, no network. We assert the
-quarter helpers, horizon filtering (YTD vs calendar quarter), last-shift
-tracking, fair-share deficits, and the carry_deviation quarter seeding.
+All pure: hand-built people + dates, no Sheets, no network. We assert basic
+counting, last-shift tracking, and the FTE-weighted fair-share deficit.
 """
 
-from dataclasses import replace
 from datetime import date
 
 import pytest
 
 from shift_proposer.config import Settings
-from shift_proposer.engine.tallies import (
-    Tallies,
-    previous_quarter,
-    quarter_of,
-)
+from shift_proposer.engine.tallies import Tallies
 from shift_proposer.models import Block, Person
 
 ANN = Person("Ann")
@@ -30,22 +24,6 @@ def make() -> Tallies:
     return Tallies.empty(PEOPLE, SETTINGS)
 
 
-# --- quarter helpers -------------------------------------------------------
-
-
-def test_quarter_of_maps_months_to_calendar_quarters():
-    assert quarter_of(date(2026, 1, 15)) == (2026, 1)
-    assert quarter_of(date(2026, 3, 31)) == (2026, 1)
-    assert quarter_of(date(2026, 4, 1)) == (2026, 2)
-    assert quarter_of(date(2026, 7, 1)) == (2026, 3)
-    assert quarter_of(date(2026, 12, 31)) == (2026, 4)
-
-
-def test_previous_quarter_wraps_year_boundary():
-    assert previous_quarter((2026, 2)) == (2026, 1)
-    assert previous_quarter((2026, 1)) == (2025, 4)
-
-
 # --- recording & basic counters -------------------------------------------
 
 
@@ -53,20 +31,17 @@ def test_empty_tallies_have_zero_counts_and_no_last_shift():
     t = make()
     asof = date(2026, 6, 16)
     assert t.shift_days(ANN, 2026) == 0
-    assert t.weekend_days(ANN, 2026) == 0
     assert t.last_shift(ANN) is None
     assert t.days_since_last_shift(ANN, asof) is None
 
 
 def test_record_block_counts_shift_days_and_updates_last_shift():
     t = make()
-    # Fri-Mon: 4 shift-days, 2 of them weekend (Sat 13, Sun 14).
     block = Block(
         dates=(date(2026, 6, 12), date(2026, 6, 13), date(2026, 6, 14), date(2026, 6, 15))
     )
     t.record_block(ANN, block)
     assert t.shift_days(ANN, 2026) == 4
-    assert t.weekend_days(ANN, 2026) == 2
     assert t.last_shift(ANN) == date(2026, 6, 15)
 
 
@@ -75,7 +50,7 @@ def test_record_is_idempotent_on_duplicate_days():
     days = (date(2026, 6, 13), date(2026, 6, 14))
     t.record_days(ANN, days)
     t.record_days(ANN, days)  # same days again — must not double-count
-    assert t.weekend_days(ANN, 2026) == 2
+    assert t.shift_days(ANN, 2026) == 2
 
 
 def test_days_since_last_shift_is_gap_in_days():
@@ -169,47 +144,3 @@ def test_non_positive_fte_is_rejected():
         Tallies.empty(PEOPLE, SETTINGS, fte={ANN: 0.0})
     with pytest.raises(ValueError, match="positive"):
         Tallies.empty(PEOPLE, SETTINGS, fte={BO: -0.5})
-
-
-# --- weekend deficit & quarter carry-over ----------------------------------
-
-
-def test_weekend_deficit_combines_ytd_and_quarter_horizons():
-    t = make()
-    asof = date(2026, 5, 16)  # Q2
-    # Ann took both weekend days this quarter; others none.
-    t.record_days(ANN, (date(2026, 5, 9), date(2026, 5, 10)))  # Sat, Sun (Q2)
-    ann = t.weekend_deficit(ANN, asof)
-    bo = t.weekend_deficit(BO, asof)
-    assert ann < bo  # Ann is over-served on weekends -> lower deficit
-
-
-def test_carry_deviation_seeds_quarter_from_prior_quarter_imbalance():
-    """A person over-served on weekends in Q1 should start Q2 disadvantaged."""
-    t = make()
-    asof_q2 = date(2026, 4, 6)  # Q2, before anyone works in Q2
-    # Q1 imbalance: Ann did 2 weekend-days, Bo/Cai did 0.
-    t.record_days(ANN, (date(2026, 3, 14), date(2026, 3, 15)))  # Sat, Sun (Q1)
-
-    ann = t.weekend_deficit(ANN, asof_q2)
-    bo = t.weekend_deficit(BO, asof_q2)
-    # YTD: Ann is over (2 vs 0) -> ytd term lower for Ann.
-    # Quarter (Q2) raw counts are all 0, but carry_deviation seeds Ann high,
-    # so the quarter term also disfavors Ann. Both push Ann below Bo.
-    assert ann < bo
-
-
-def test_quarter_seed_zero_ignores_prior_quarter_in_quarter_term():
-    t = make()
-    settings_zero = replace(SETTINGS, quarter_seed="zero")
-    t_zero = Tallies.empty(PEOPLE, settings_zero)
-    asof_q2 = date(2026, 4, 6)
-    days = (date(2026, 3, 14), date(2026, 3, 15))  # Q1 weekend for Ann
-    t.record_days(ANN, days)
-    t_zero.record_days(ANN, days)
-
-    # With carry_deviation the prior-quarter imbalance still tilts the quarter
-    # term; with zero seeding the Q2 quarter term is flat across people.
-    spread_carry = t.weekend_deficit(ANN, asof_q2) - t.weekend_deficit(BO, asof_q2)
-    spread_zero = t_zero.weekend_deficit(ANN, asof_q2) - t_zero.weekend_deficit(BO, asof_q2)
-    assert spread_carry < spread_zero <= 0

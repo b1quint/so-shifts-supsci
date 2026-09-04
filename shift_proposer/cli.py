@@ -251,8 +251,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         metavar="W",
-        help="penalty weight per '?' day in a block (default: 1.5); "
+        help="penalty weight per '?' day in a block (default: 2.0); "
         "higher values make the proposer avoid '?' days more aggressively",
+    )
+    parser.add_argument(
+        "--w-prep",
+        type=float,
+        default=None,
+        metavar="W",
+        help="penalty weight per unavailable day in the pre-shift prep window "
+        "(the Wed/Thu/Fri before the shift's Monday start); higher values favor "
+        "candidates who can actually prepare",
     )
     parser.add_argument(
         "--window-start",
@@ -285,6 +294,8 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         overrides["window_end"] = args.window_end
     if args.w_question is not None:
         overrides["w_question"] = args.w_question
+    if args.w_prep is not None:
+        overrides["w_prep"] = args.w_prep
     return Settings.from_env(**overrides)
 
 

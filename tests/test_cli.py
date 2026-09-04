@@ -277,3 +277,11 @@ def test_w_question_threads_into_settings():
     # --w-question overrides it.
     s = _settings_from_args(parse_args(["--w-question", "3.0"]))
     assert s.w_question == 3.0
+
+
+def test_w_prep_threads_into_settings():
+    # No flag -> Settings default (1.0) is used.
+    assert _settings_from_args(parse_args([])).w_prep == 1.0
+    # --w-prep overrides it.
+    s = _settings_from_args(parse_args(["--w-prep", "2.5"]))
+    assert s.w_prep == 2.5

@@ -30,7 +30,7 @@ def block(start: date, n: int = 4) -> Block:
 def assignment(person: Person, start: date) -> Assignment:
     rationale = Rationale(
         total=3.42,
-        terms={"total": 2.67, "weekend": 0.5, "spacing": 0.0, "question": -0.5},
+        terms={"total": 2.67, "spacing": 0.0, "question": -0.5, "prep": 0.5},
     )
     return Assignment(person=person, block=block(start), rationale=rationale)
 
@@ -44,9 +44,9 @@ def test_header_is_base_columns_plus_ordered_terms():
         "person",
         "score",
         "total",
-        "weekend",
         "spacing",
         "question",
+        "prep",
     ]
 
 
@@ -59,9 +59,9 @@ def test_proposed_row_formats_dates_and_numbers():
         "Ann",
         "3.4200",
         "2.6700",
-        "0.5000",
         "0.0000",
         "-0.5000",
+        "0.5000",
     ]
 
 

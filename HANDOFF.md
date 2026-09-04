@@ -197,6 +197,49 @@ writeback stays fill-empty-only — see the lower-priority clear/rewrite-mode fo
 - A **clear/rewrite** option for the proposal tab would make re-runs clean (current writeback is
   fill-empty-only by design); worth adding now that no-shift edits can change an already-written window.
 
+## 7-day Monday-anchored shifts + prep-window penalty — IN PROGRESS (2026-09-04)
+
+New engine version on branch `tickets/RSO-910` (Jira: [RSO-921](https://rubinobs.atlassian.net/browse/RSO-921),
+child of the RSO-910 automation epic). Decided in the Summit Sci meeting: shifts move from 4-day
+floating blocks to **7-day blocks that always start on a Monday**. The person on shift is expected to
+be available to *prepare* the week before — specifically the Wed/Thu/Fri right before their Monday
+start — but that's a soft nudge, not a hard blocker.
+
+- **`config.py`** — `shift_len` 4→7, `block_align` `"float"`→`"monday"`. Removed `w_weekend`,
+  `quarter_mode`, `quarter_seed` (see below); added `w_prep` (default `1.0`).
+- **`engine/blocks.py`** — `enumerate_blocks` gained an optional `anchor_weekday` param (0=Monday).
+  When set, a run is split at its first occurrence of that weekday into a leading short block (if the
+  run starts mid-week) plus full `shift_len`-day blocks from there — since `shift_len` days from an
+  anchored start lands on the same weekday again, every subsequent full block stays anchored for
+  free. Backward compatible: `anchor_weekday=None` (the default) preserves the old float behavior
+  byte-for-byte, so every pre-existing test in `test_blocks.py` needed no changes.
+- **`engine/tallies.py`** — removed the whole weekend/calendar-quarter machinery
+  (`weekend_days`, `weekend_days_in_quarter`, `weekend_deficit`, `_quarter_seed`, `quarter_of`,
+  `previous_quarter`, `QuarterKey`). With every block now spanning exactly one weekend, weekend load
+  is inseparable from total-shift load — the separate term and its quarter horizon (which existed
+  only to serve it) had no remaining purpose. Fairness is now YTD-only.
+- **`engine/scoring.py`** — replaced the `weekend` term with `prep`: `-w_prep * n_unprepared`, where
+  an "unprepared" day is one of the block's prior Wed/Thu/Fri (`block.start` minus 5/4/3 days) whose
+  code isn't in `available_codes | {QUESTION}` (i.e. it's `X`). Graded by count, same spirit as
+  `w_question`.
+- **`engine/greedy.py`** — threads `settings.block_align == "monday"` into `enumerate_blocks` as
+  `anchor_weekday=0`.
+- **`output/proposal.py`** — `_TERM_ORDER` updated (`weekend`→`prep`, reordered).
+- **`cli.py`** — new `--w-prep` flag, mirroring `--w-question`.
+- Rewrote/extended tests: `test_tallies.py` (dropped all weekend/quarter tests), `test_blocks.py`
+  (new `anchor_weekday` cases), `test_scoring.py` (new prep-window tests), `test_eligibility.py` /
+  `test_greedy.py` (rest-day math updated to 14 days at the new default `shift_len`; the
+  fair-share/rest/mode tests in `test_greedy.py` pin `shift_len=4, block_align="float"` explicitly
+  since block shape is orthogonal to what they're testing — a separate
+  `test_default_settings_anchor_blocks_to_monday` exercises the real defaults end-to-end),
+  `test_models.py`, `test_proposal_output.py`, `test_writeback.py`, `test_cli.py`. **173 tests
+  passing, ruff clean.**
+- Docs updated to match: `algorithm.md`, `architecture.md`, `decisions.md`, `rules-and-objectives.md`,
+  `overview.md`, `README.md`.
+
+**Not yet done:** live run against the real sheet with the new shift length; `docs/status.md`
+top-of-file summary still describes the old 4-day MVP as current.
+
 ## Commits
 
 - `8d73509` — output: 'Out' marker excludes non-rotation people (+ CLAUDE/README docs)

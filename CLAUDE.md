@@ -17,7 +17,10 @@ Django backend, so the scheduling logic must stay reusable (see Conventions).
 
 ## Current status
 
-Design complete, **no code yet**. Build from scratch in the layout below.
+MVP shipped and run live (see [docs/status.md](docs/status.md)). In progress on branch
+`tickets/RSO-910` ([RSO-921](https://rubinobs.atlassian.net/browse/RSO-921)): a new engine version
+moving from 4-day floating blocks to **7-day Monday-anchored shifts** with a soft prep-window
+penalty (see the Algorithm and decisions table below, which already reflect this new model).
 
 ## Tech & setup
 
@@ -82,7 +85,7 @@ and unit-testable without auth.
 ```
 shift_proposer/
 ├── cli.py            # entrypoint: build Settings, wire adapter -> engine -> output
-├── config.py         # Settings dataclass: weights, shift_len=4, window, policy values
+├── config.py         # Settings dataclass: weights, shift_len=7, window, policy values
 ├── models.py         # PURE domain types: Person, Code(enum), AvailabilityGrid, Block,
 │                     #   Assignment, Proposal, Rationale
 ├── io/
@@ -90,11 +93,13 @@ shift_proposer/
 │   ├── parser.py     # raw grid -> AvailabilityGrid + existing Assignments; A/AS/AR/- -> available
 │   └── fte.py        # raw FTE tab -> {Person: weight} (target FTE %, keyed by name)
 ├── engine/           # PURE. no gspread, no I/O. domain objects in, Proposal out.
-│   ├── blocks.py     # enumerate unfilled blocks in window (shift_len, short tail >= min_shift_len)
+│   ├── blocks.py     # enumerate unfilled blocks in window (shift_len, anchored to Monday,
+│   │                 #   short tail >= min_shift_len)
 │   ├── eligibility.py# hard rules: skip filled, reject any 'X', enforce >=2-rotation rest
-│   ├── tallies.py    # shift-days + weekend-days on 2 horizons (YTD + calendar quarter w/
-│   │                 #   carry-over); per-person last-shift date; FTE-weighted fair-share targets
+│   ├── tallies.py    # shift-days on the YTD horizon; per-person last-shift date;
+│   │                 #   FTE-weighted fair-share targets
 │   ├── scoring.py    # score(person, block, tallies) -> float + per-term breakdown
+│   │                 #   (incl. the Wed/Thu/Fri prep-window penalty)
 │   └── greedy.py     # loop: block -> eligible -> score -> pick (stable tie-break) -> update
 └── output/
     ├── proposal.py   # Proposal: list[Assignment] + per-pick Rationale (score trace)
@@ -104,24 +109,30 @@ shift_proposer/
 ## Algorithm (greedy + scoring)
 
 ```
-# runs of consecutive unfilled days are chopped into shift_len blocks; a leftover
-# run >= min_shift_len is still proposed as a SHORT block (default min_shift_len=1).
+# runs of consecutive unfilled days are chopped into shift_len (7-day) blocks anchored
+# to Monday; a leftover run >= min_shift_len is still proposed as a SHORT block
+# (default min_shift_len=1) -- e.g. a run not starting on Monday gets a short leading
+# block up to the first one.
 for each unfilled block in the window, in date order:
     candidates = people available on all its days (A/AS/AR/- ok; no 'X')
                  AND past their minimum rest (>= 2 rotations since last shift)
     for each candidate:
         score =  w_total    * (how far below fair-share of total shifts, YTD)
-               + w_weekend  * (how far below fair-share of weekends, YTD + current quarter*)
                + w_spacing  * (days since their last shift)        # maximize rest
                - w_question * (number of '?' days in this block)
+               - w_prep     * (number of unavailable days in the pre-shift prep window)
         # fair-share target is FTE-weighted: total * fte_person / sum(fte),
         # not a flat total / n_people (equal FTE reduces to the equal split).
+        # prep window = the Wed/Thu/Fri right before the block's Monday start;
+        # NOT a hard blocker -- just a soft nudge towards someone who can prepare.
     if no candidate: leave block unfilled and FLAG it (never violate rest)
     else: assign highest-scoring candidate (stable tie-break)
-    update tallies (shift-days, weekend-days by calendar quarter, last-shift date)
-
-# *current-quarter counters are SEEDED from the prior quarter (carry-over), not reset to zero.
+    update tallies (shift-days YTD, last-shift date)
 ```
+
+With 7-day shifts every block spans exactly one weekend, so there is no separate weekend-fairness
+term or calendar-quarter horizon any more (removed — see decisions table); total-shift fair share
+already covers it, and the old "two weekends in a row" concern can no longer happen.
 
 Greedy is chosen over an ILP optimizer for v1: simple, explainable, tunable. Every assignment
 carries a `Rationale` (per-term score breakdown) so the reviewer sees *why* each pick was made.
@@ -134,11 +145,11 @@ All policy lives in `Settings` (config.py), not scattered in code:
 | --- | --- |
 | `A/AS/AR/-` all "available" | `available_codes = {A, AS, AR, -}` |
 | `?` penalized but eligible | `w_question` |
-| 4-day blocks float freely (no weekday anchor) | `block_align = "float"` |
+| 7-day blocks, always anchored to Monday | `block_align = "monday"`, `shift_len = 7` |
 | Short shifts allowed (cover leftover runs < shift_len) | `min_shift_len = 1` |
-| Fairness over YTD **and** calendar quarter | `quarter_mode = "calendar"` |
+| Prep-window penalty: soft, not a blocker (Wed/Thu/Fri before start) | `w_prep` |
+| Fairness over YTD only | (weekend + calendar-quarter horizon removed; see below) |
 | Fair share FTE-weighted (equal-split fallback) | `fte_tab_name` (None ⇒ equal split) |
-| Quarter seeded from prior quarter (not reset cold) | `quarter_seed = "carry_deviation"` |
 | Minimum rest = 2 rotations (hard) + maximize spacing (soft) | `min_rest_rotations = 2`, `w_spacing` |
 | Review-first output, never live rows | `output_target = "proposed_column"` |
 | Proposal written to a SupSci-shaped duplicate tab | `proposal_tab_name`, `proposal_token = "S"` |
@@ -157,14 +168,18 @@ reopened dates, so `--mode rebuild` with `--out-tab` warns to clear that tab's w
 
 **Goal of the scoring:** minimize the spread (variance) of per-person load across scientists.
 
-**One knob still open:** `quarter_seed` default is `"carry_deviation"` (carry each person's
-prior-quarter deviation-from-mean into the new quarter). Alternatives: `"carry_total"`,
-`"zero"`. Tune once there are real numbers; it's a one-line change in `tallies.py`.
+**Weekend fairness + calendar-quarter horizon (removed).** The original v1 design tracked
+weekend-days on a second horizon (YTD + calendar quarter, quarter seeded from the prior quarter's
+deviation via `quarter_seed`) because 4-day floating blocks could land someone on consecutive
+weekends. With 7-day Monday-anchored shifts every block spans exactly one weekend, so that scenario
+can't happen and weekend load is inseparable from total-shift load — the whole mechanism
+(`w_weekend`, `quarter_mode`, `quarter_seed`, and the corresponding `Tallies` methods) was deleted
+rather than kept dead. Fairness is now tracked on a single YTD horizon.
 
 ## Suggested build order
 
 1. `models.py` + `config.py` — domain types and the `Settings` dataclass. No logic yet.
-2. `engine/tallies.py` — the two-horizon counter with quarter carry-over and last-shift
+2. `engine/tallies.py` — the YTD fair-share counter, FTE-weighted, plus last-shift
    tracking. **Most logic, fully pure -> write this with unit tests first** (hand-built fixtures,
    no Sheets).
 3. `engine/blocks.py`, `eligibility.py`, `scoring.py`, then `greedy.py` — also pure, also
@@ -180,7 +195,8 @@ prior-quarter deviation-from-mean into the new quarter). Alternatives: `"carry_t
 - Assert **determinism**: same inputs -> identical proposal (stable tie-break: lowest YTD load,
   then name).
 - Cover the edge cases explicitly: a block with no eligible candidate (must be flagged, not
-  filled), the rest rule across a person's prior assignment, and quarter-boundary carry-over.
+  filled), the rest rule across a person's prior assignment, a run not starting on Monday (leading
+  short block), and the prep-window penalty (graded, and never a hard block).
 
 ## Conventions / guardrails
 

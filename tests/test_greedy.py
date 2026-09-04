@@ -22,7 +22,11 @@ CAI = Person("Cai")
 PEOPLE = (ANN, BO, CAI)
 
 MON = date(2026, 6, 1)
-SETTINGS = Settings()  # shift_len=4, min_rest_rotations=2 -> 8 days rest
+# shift_len=4, float alignment: keeps the block math simple (window[0:4] etc.)
+# for these fair-share/rest/mode tests, which are orthogonal to block shape.
+# Monday-anchored 7-day blocks are covered in test_blocks.py and exercised
+# end-to-end (via defaults) in test_default_settings_anchor_blocks_to_monday.
+SETTINGS = replace(Settings(), shift_len=4, block_align="float")  # -> 8 days rest
 
 
 def days(start: date, n: int) -> list[date]:
@@ -215,6 +219,18 @@ def test_question_person_is_picked_when_no_clean_candidate_exists():
     proposal = propose(make_grid(window, codes), SETTINGS)
     assert len(proposal.assignments) == 1
     assert proposal.unfilled == ()
+
+
+def test_default_settings_anchor_blocks_to_monday():
+    # With the real defaults (shift_len=7, block_align="monday"), a 14-day
+    # window starting on a Monday chops into two Monday-Sunday blocks.
+    window = days(MON, 14)
+    proposal = propose(make_grid(window), Settings())
+    assert [a.block.dates for a in proposal.assignments] == [
+        tuple(window[0:7]),
+        tuple(window[7:14]),
+    ]
+    assert all(a.block.start.weekday() == 0 for a in proposal.assignments)
 
 
 def test_out_person_covered_dates_do_not_seed_fairness_tallies():

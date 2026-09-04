@@ -38,7 +38,7 @@ class Settings:
     """
 
     # --- shift / rest shape ------------------------------------------------
-    shift_len: int = 4  # ideal block length; a run is chopped into shift_len blocks
+    shift_len: int = 7  # ideal block length; a run is chopped into shift_len blocks
     # Smallest block to still propose for a leftover run shorter than shift_len
     # (so short shifts get covered, not dropped). 1 = cover everything down to a
     # single night; set to shift_len to require full blocks only.
@@ -59,14 +59,12 @@ class Settings:
 
     # --- scoring weights ---------------------------------------------------
     w_total: float = 1.0  # below fair-share of total shifts (YTD)
-    w_weekend: float = 1.0  # below fair-share of weekends (YTD + quarter)
     w_spacing: float = 0.1  # days since last shift (maximize rest)
     w_question: float = 2.0  # penalty per "?" day in the block
+    w_prep: float = 1.0  # penalty per unavailable day in the pre-shift prep window
 
     # --- locked v1 decision flags -----------------------------------------
-    block_align: str = "float"  # blocks float freely, no weekday anchor
-    quarter_mode: str = "calendar"  # fairness over YTD AND calendar quarter
-    quarter_seed: str = "carry_deviation"  # seed quarter from prior quarter
+    block_align: str = "monday"  # every block starts on Monday (7-day shifts)
     output_target: str = "proposed_column"  # review-first, never live rows
 
     # --- run window --------------------------------------------------------
