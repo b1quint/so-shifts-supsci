@@ -24,7 +24,7 @@ from shift_proposer.models import Proposal
 
 # Preferred left-to-right order for the score terms; any unknown term sorts
 # after these, alphabetically. Keeps reports and CSV columns stable.
-_TERM_ORDER = ("total", "weekend", "spacing", "question")
+_TERM_ORDER = ("total", "spacing", "question", "prep")
 
 STATUS_PROPOSED = "proposed"
 STATUS_UNFILLED = "unfilled"

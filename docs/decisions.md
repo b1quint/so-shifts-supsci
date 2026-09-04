@@ -23,12 +23,19 @@ later upgrade once the tool graduates from manual runs.
 - Treat `-` (not answered) as available (same tier as `A`) — unanswered availability requests are
   assumed available.
 - Ignore the summit/remote distinction — `A`/`AS`/`AR` all count as "available" for v1.
-- 4-day blocks float freely from the first gap; no weekday anchoring.
+- 7-day blocks, always starting on Monday (`block_align = "monday"`): a run not starting on a Monday
+  gets a short leading block up to the first one, then full Monday-Sunday blocks.
 - A leftover run shorter than `shift_len` is covered as a **short shift** (`min_shift_len`, default
   `1`) rather than dropped.
-- Fairness is tracked on two horizons: year-to-date and the current calendar quarter, with the
-  quarter seeded (carried over) from the previous quarter so balance isn't reset cold.
-- A person must rest at least two 4-day rotations before being reassigned; beyond that, maximize
+- Fairness is tracked on a single horizon: year-to-date shift-days. (The prior two-horizon design —
+  YTD + calendar-quarter weekend fairness, quarter-seeded from carry-over — was removed with the move
+  to 7-day shifts: every shift now spans exactly one weekend, so weekend load is just total-shift
+  load and needs no separate tracking.)
+- The person on shift is expected to *prepare* the week before, specifically the Wed/Thu/Fri
+  immediately preceding their Monday start. Being unavailable (`X`) on those days is **not** a hard
+  blocker — only a soft penalty (`w_prep`, graded by how many of the 3 days are unavailable) that
+  nudges the pick towards someone who can actually prepare.
+- A person must rest at least two 7-day rotations before being reassigned; beyond that, maximize
   spacing. Rest is a hard guarantee — never traded away.
 - If the rest rule leaves no eligible person for a block, leave it unfilled and flagged rather than
   forcing a violation.
@@ -39,9 +46,6 @@ later upgrade once the tool graduates from manual runs.
 - Non-rotation people (occasional coverers) are marked `Out` in column C: kept in the sheet for
   records but excluded from scheduling and from the fair-share average. They are **not** marked `X`
   everywhere, which would still count them in the headcount.
-- Quarter carry-over uses carry-deviation-from-mean (`quarter_seed = "carry_deviation"`): someone
-  who was overloaded starts the new quarter already "ahead" on the tally. The alternatives (carry
-  full totals, or hard-reset to zero) remain one-line switches in `engine/tallies.py`.
 - Fair share is FTE-weighted by each person's Target Fraction of Time (read from the `Stats - SupSci`
   tab via `--fte-tab`); with no FTE tab, or equal targets, it reduces to the equal split.
 - The proposal is written into a SupSci-shaped duplicate tab (`SupSci Shift Proposal`, via

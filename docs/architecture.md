@@ -11,17 +11,17 @@ unchanged.
 ```text
 shift_proposer/
 ├── cli.py            # entrypoint: build Settings, wire adapter → engine → output
-├── config.py         # Settings dataclass: weights, shift_len=4, window, policy values
+├── config.py         # Settings dataclass: weights, shift_len=7, window, policy values
 ├── models.py         # PURE domain types: Person, Code(enum), AvailabilityGrid, Block, Assignment, Proposal, Rationale
 ├── io/
 │   ├── sheets.py     # gspread + OAuth: open SupSci + FTE tabs → raw cell grid  (the ONLY gspread import)
 │   ├── parser.py     # raw grid → AvailabilityGrid + existing Assignments + no-shift dates; A/AS/AR/- → available
 │   └── fte.py        # raw FTE tab → {Person: weight} (Target Fraction of Time, keyed by name)
 ├── engine/           # PURE. no gspread, no I/O. domain objects in, Proposal out.
-│   ├── blocks.py     # enumerate unfilled blocks in the window, date order; blocks float freely; short tail >= min_shift_len
+│   ├── blocks.py     # enumerate unfilled blocks in the window, date order; anchored to Monday; short tail >= min_shift_len
 │   ├── eligibility.py# hard rules: skip filled, reject any 'X', enforce >=2-rotation rest
-│   ├── tallies.py    # shift-days + weekend-days on 2 horizons (YTD + calendar quarter w/ carry-over); FTE-weighted fair share; last-shift date
-│   ├── scoring.py    # score(person, block, tallies) → float + per-term breakdown (incl. spacing reward)
+│   ├── tallies.py    # shift-days on the YTD horizon; FTE-weighted fair share; last-shift date
+│   ├── scoring.py    # score(person, block, tallies) → float + per-term breakdown (spacing reward, prep-window penalty)
 │   └── greedy.py     # main loop: block → eligible → score → pick best (stable tie-break) → update tallies
 └── output/
     ├── proposal.py   # Proposal: list[Assignment] + per-pick Rationale (the score trace) for review
@@ -48,16 +48,17 @@ shift_proposer/
    plus the set of existing `Assignment`s and the no-shift dates. It reads the **full year**, not
    just the window, because history seeds the tallies. Collapses `A/AS/AR/-` to "available".
    `io.fte` parses the FTE tab into per-person weights.
-4. **engine.tallies** seeds per-person counters from the existing assignments — shift-days +
-   weekend-days on both horizons (YTD, and the current calendar quarter carried over from the prior
-   quarter), plus each person's last-shift date — and computes each person's FTE-weighted fair-share
-   target.
-5. **engine.blocks** lists the unfilled 4-day blocks inside the window, in date order, floating from
-   each gap (no-shift dates break the runs).
+4. **engine.tallies** seeds per-person counters from the existing assignments — shift-days on the
+   YTD horizon, plus each person's last-shift date — and computes each person's FTE-weighted
+   fair-share target.
+5. **engine.blocks** lists the unfilled 7-day blocks inside the window, in date order, anchored to
+   Monday (a run not starting on a Monday gets a short leading block up to the first one; no-shift
+   dates break the runs).
 6. **engine.greedy** walks the blocks: `eligibility` drops anyone with an `X` and anyone still
-   inside their rest window; `scoring` ranks the rest; the top candidate (stable tie-break) is
-   assigned; `tallies` updates so the next block sees fresh numbers. A block with no eligible
-   candidate is left unfilled and flagged.
+   inside their rest window; `scoring` ranks the rest — including a penalty for being unavailable in
+   the Wed/Thu/Fri prep window right before the block's Monday start; the top candidate (stable
+   tie-break) is assigned; `tallies` updates so the next block sees fresh numbers. A block with no
+   eligible candidate is left unfilled and flagged.
 7. **output.proposal** accumulates each pick plus its score breakdown.
 8. **output.writeback** renders the proposal to CSV and, when `--out-tab` is set, plans the cells to
    fill in the duplicate tab; `io.sheets` applies them. Live assignment rows are never modified.
@@ -73,9 +74,9 @@ than scattered through the code. See [Decisions](decisions.md) for the rationale
 | --- | --- | --- |
 | `A/AS/AR/-` all "available" | `available_codes = {A, AS, AR, -}` | `io/parser.py` |
 | `?` penalized (still eligible) | `w_question` | `engine/scoring.py` |
-| Blocks float freely | `block_align = "float"` | `engine/blocks.py` |
+| 7-day blocks anchored to Monday | `block_align = "monday"`, `shift_len = 7` | `engine/blocks.py` |
 | Short shifts allowed (cover leftover runs < shift_len) | `min_shift_len = 1` | `engine/blocks.py` |
-| Calendar quarter, seeded from prior quarter | `quarter_mode = "calendar"`, `quarter_seed = "carry_deviation"` | `engine/tallies.py` |
+| Prep-window penalty (Wed/Thu/Fri before start; soft, not a blocker) | `w_prep` | `engine/scoring.py` |
 | FTE-weighted fair share (equal-split fallback) | `fte_tab_name` (None ⇒ equal split) | `io/fte.py` + `engine/tallies.py` |
 | Proposal written to a SupSci-shaped duplicate tab | `proposal_tab_name`, `proposal_token = "S"` | `output/writeback.py` + `io/sheets.py` |
 | No-shift dates skipped (`Requires support?` = FALSE) | `LayoutConfig.support_label` | `io/parser.py` + `engine/greedy.py` |

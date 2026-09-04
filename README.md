@@ -284,12 +284,14 @@ Without `--fte-tab`, fair share is a plain equal split.
 All knobs live in one place: the `Settings` dataclass in
 [shift_proposer/config.py](shift_proposer/config.py). Defaults:
 
-- `shift_len = 4` (ideal days per block), `min_shift_len = 1` (smallest short
-  shift used to cover a leftover run; set to `shift_len` to require full blocks)
-- `min_rest_rotations = 2` (hard rest rule)
-- weights: `w_total = 1.0`, `w_weekend = 1.0`, `w_spacing = 0.1`, `w_question = 0.5`
-- `quarter_seed = "carry_deviation"` (how the quarterly weekend fairness carries
-  over from the previous quarter)
+- `shift_len = 7` (ideal days per block, anchored to Monday via `block_align =
+  "monday"`), `min_shift_len = 1` (smallest short shift used to cover a
+  leftover run; set to `shift_len` to require full blocks)
+- `min_rest_rotations = 2` (hard rest rule — 14 days at the default `shift_len`)
+- weights: `w_total = 1.0`, `w_spacing = 0.1`, `w_question = 2.0`, `w_prep = 1.0`
+  (`w_prep` penalizes unavailability in the Wed/Thu/Fri prep window right
+  before the shift's Monday start — soft, not a blocker; `--w-question` and
+  `--w-prep` override the last two from the CLI)
 - `fte_tab_name = None` (set via `--fte-tab` to weight fair share by target FTE)
 
 These are starting points — tune them once you've seen real proposals.

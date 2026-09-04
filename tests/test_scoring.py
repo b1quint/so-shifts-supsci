@@ -84,13 +84,59 @@ def test_never_assigned_person_gets_zero_spacing_term():
 
 def test_weights_scale_their_terms():
     # Zero every weight but w_question: only the penalty term should remain.
-    settings = replace(SETTINGS, w_total=0.0, w_weekend=0.0, w_spacing=0.0, w_question=1.0)
+    settings = replace(SETTINGS, w_total=0.0, w_spacing=0.0, w_question=1.0, w_prep=0.0)
     b = block(MON)
     t = Tallies.empty(PEOPLE, settings)
     t.record_block(BO, block(MON - timedelta(days=60)))  # make deficits nonzero
     g = grid({(ANN, b.dates[0]): Code.QUESTION}, b.dates)
     total, rationale = score(g, t, settings, ANN, b)
     assert rationale.terms["total"] == 0.0
-    assert rationale.terms["weekend"] == 0.0
     assert rationale.terms["spacing"] == 0.0
+    assert rationale.terms["prep"] == 0.0
     assert total == -1.0
+
+
+# --- prep-window penalty ("prepare" the week before, Wed/Thu/Fri) ---------
+
+PREV_WED = MON - timedelta(days=5)
+PREV_THU = MON - timedelta(days=4)
+PREV_FRI = MON - timedelta(days=3)
+
+
+def test_unavailable_prep_days_apply_a_penalty():
+    b = block(MON)
+    t = Tallies.empty(PEOPLE, SETTINGS)
+    g = grid({(ANN, PREV_WED): Code.X, (ANN, PREV_THU): Code.X}, b.dates)
+    _, rationale = score(g, t, SETTINGS, ANN, b)
+    assert rationale.terms["prep"] == -SETTINGS.w_prep * 2
+
+
+def test_available_or_question_prep_days_are_not_penalized():
+    b = block(MON)
+    t = Tallies.empty(PEOPLE, SETTINGS)
+    g = grid({(ANN, PREV_WED): Code.A, (ANN, PREV_THU): Code.QUESTION}, b.dates)
+    _, rationale = score(g, t, SETTINGS, ANN, b)
+    assert rationale.terms["prep"] == 0.0
+
+
+def test_prep_penalty_is_graded_by_number_of_unprepared_days():
+    b = block(MON)
+    t = Tallies.empty(PEOPLE, SETTINGS)
+    one_bad = grid({(ANN, PREV_FRI): Code.X}, b.dates)
+    three_bad = grid(
+        {(ANN, PREV_WED): Code.X, (ANN, PREV_THU): Code.X, (ANN, PREV_FRI): Code.X}, b.dates
+    )
+    _, one_r = score(one_bad, t, SETTINGS, ANN, b)
+    _, three_r = score(three_bad, t, SETTINGS, ANN, b)
+    assert one_r.terms["prep"] == -SETTINGS.w_prep * 1
+    assert three_r.terms["prep"] == -SETTINGS.w_prep * 3
+
+
+def test_prep_window_only_looks_at_wed_thu_fri_before_block_start():
+    b = block(MON)
+    t = Tallies.empty(PEOPLE, SETTINGS)
+    # X on the Monday/Tuesday before (outside the prep window) must not count.
+    outside = (MON - timedelta(days=7), MON - timedelta(days=6))
+    g = grid({(ANN, outside[0]): Code.X, (ANN, outside[1]): Code.X}, b.dates + outside)
+    _, rationale = score(g, t, SETTINGS, ANN, b)
+    assert rationale.terms["prep"] == 0.0

@@ -26,7 +26,7 @@ def block(start: date, n: int = 4) -> Block:
 def assignment(person: Person, start: date) -> Assignment:
     rationale = Rationale(
         total=3.42,
-        terms={"total": 2.67, "weekend": 0.5, "spacing": 0.0, "question": -0.5},
+        terms={"total": 2.67, "spacing": 0.0, "question": -0.5, "prep": 0.5},
     )
     return Assignment(person=person, block=block(start), rationale=rationale)
 
@@ -54,7 +54,7 @@ def test_proposed_row_carries_person_score_and_terms():
     (row,) = to_rows(proposal)
     assert row.person == "Ann"
     assert row.score == 3.42
-    assert row.terms["weekend"] == 0.5
+    assert row.terms["prep"] == 0.5
 
 
 def test_unfilled_row_has_no_person_or_score():
@@ -73,7 +73,7 @@ def test_report_shows_score_trace_in_preferred_term_order():
     assert "Ann" in line
     assert "score=+3.42" in line
     # terms appear in the preferred order, signed and 2-dp.
-    assert "[total=+2.67 weekend=+0.50 spacing=+0.00 question=-0.50]" in line
+    assert "[total=+2.67 spacing=+0.00 question=-0.50 prep=+0.50]" in line
 
 
 def test_report_flags_unfilled_blocks():

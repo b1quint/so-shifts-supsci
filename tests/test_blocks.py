@@ -94,3 +94,46 @@ def test_duplicate_dates_do_not_inflate_blocks():
     window = days(MON, 4) * 2  # same four days twice
     blocks = enumerate_blocks(window, filled=set(), shift_len=4)
     assert len(blocks) == 1
+
+
+# --- anchor_weekday (7-day Monday-start shifts) -----------------------------
+
+MONDAY = date(2026, 6, 1)  # a Monday
+
+
+def test_anchor_weekday_none_preserves_float_behaviour():
+    window = days(MONDAY + timedelta(days=2), 7)  # starts on a Wednesday
+    blocks = enumerate_blocks(window, filled=set(), shift_len=7, anchor_weekday=None)
+    assert [b.dates for b in blocks] == [tuple(window)]
+
+
+def test_run_starting_on_the_anchor_weekday_needs_no_leading_block():
+    window = days(MONDAY, 14)
+    blocks = enumerate_blocks(window, filled=set(), shift_len=7, anchor_weekday=0)
+    assert [b.dates for b in blocks] == [tuple(window[0:7]), tuple(window[7:14])]
+    assert all(b.start.weekday() == 0 for b in blocks)
+
+
+def test_run_not_starting_on_monday_gets_a_leading_short_block():
+    # Run starts on Wednesday: a 5-day leading block (Wed-Sun) up to the first
+    # Monday, then a full 7-day block anchored on it.
+    window = days(MONDAY + timedelta(days=2), 12)  # Wed .. 12 days later
+    blocks = enumerate_blocks(window, filled=set(), shift_len=7, anchor_weekday=0)
+    assert [b.dates for b in blocks] == [tuple(window[0:5]), tuple(window[5:12])]
+    assert blocks[1].start.weekday() == 0
+
+
+def test_leading_partial_dropped_below_min_shift_len():
+    # Run starts on Sunday: only 1 day before the first Monday.
+    window = days(MONDAY - timedelta(days=1), 8)  # Sun + one full Mon-Sun week
+    blocks = enumerate_blocks(
+        window, filled=set(), shift_len=7, min_shift_len=2, anchor_weekday=0
+    )
+    # The 1-day Sunday lead is below the floor and dropped; only the full week remains.
+    assert [b.dates for b in blocks] == [tuple(window[1:8])]
+
+
+def test_run_entirely_before_the_anchor_weekday_becomes_one_short_block():
+    window = days(MONDAY + timedelta(days=2), 3)  # Wed, Thu, Fri — no Monday in run
+    blocks = enumerate_blocks(window, filled=set(), shift_len=7, anchor_weekday=0)
+    assert [b.dates for b in blocks] == [tuple(window)]

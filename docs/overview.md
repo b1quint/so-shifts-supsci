@@ -21,9 +21,9 @@ schedule. Availability codes referenced throughout are defined on the
 **Decision:** build the tool in Python rather than Apps Script.
 
 **Why:** the hard part is the assignment logic — greedy selection, candidate scoring, and tracking
-per-person shift and weekend tallies across the whole year and a calendar quarter while minimizing
-variance. That is data-shaped work that is fast to write and debug in Python (pandas / datetime)
-and awkward in Apps Script's JavaScript. It also matches the existing
+per-person shift tallies across the whole year while minimizing variance. That is data-shaped work
+that is fast to write and debug in Python (pandas / datetime) and awkward in Apps Script's
+JavaScript. It also matches the existing
 [rso_shift_scheduler](https://github.com/b1quint/rso_shift_scheduler) repo and the future Django
 backend, so the logic written now is reusable rather than throwaway.
 
